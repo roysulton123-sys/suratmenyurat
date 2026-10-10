@@ -8,6 +8,8 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -16,7 +18,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -47,3 +49,15 @@ jobs:
         with:
           name: SuratSarpras-Android-App
           path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: latest-apk
+          name: "Surat Sarpras Android APK (Terbaru)"
+          body: "File APK debug aplikasi Surat Sarpras siap diunduh dan dipasang di perangkat Android."
+          draft: false
+          prerelease: false
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
