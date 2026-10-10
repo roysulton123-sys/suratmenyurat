@@ -105,13 +105,14 @@ export default function InstallAppModal({ isOpen, onClose }) {
 
           <div className="pt-2 flex flex-col sm:flex-row gap-2">
             <a
-              href="https://github.com/roysulton123-sys/suratmenyurat/releases"
+              href="https://github.com/roysulton123-sys/suratmenyurat/releases/download/latest-apk/SuratSarpras.apk"
+              download="SuratSarpras.apk"
               target="_blank"
               rel="noreferrer"
               className="flex-1 inline-flex items-center justify-center space-x-1.5 py-2.5 px-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-ocazte transition"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Unduh APK (GitHub Releases)</span>
+              <span>Unduh Langsung APK Android</span>
               <ExternalLink className="w-3 h-3 ml-1 opacity-70" />
             </a>
 

@@ -36,8 +36,8 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Android SDK Licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -49,12 +49,13 @@ jobs:
         run: |
           cd android
           ./gradlew assembleDebug --stacktrace
+          cp app/build/outputs/apk/debug/app-debug.apk ../SuratSarpras.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: SuratSarpras-Android-App
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: SuratSarpras.apk
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -62,8 +63,8 @@ jobs:
         with:
           tag_name: latest-apk
           name: "Surat Sarpras Android APK (Terbaru)"
-          body: "File APK debug aplikasi Surat Sarpras siap diunduh dan dipasang di perangkat Android."
+          body: "File APK aplikasi Surat Sarpras siap diunduh dan dipasang di smartphone Android."
           draft: false
           prerelease: false
           files: |
-            android/app/build/outputs/apk/debug/app-debug.apk
+            SuratSarpras.apk
