@@ -73,8 +73,8 @@ jobs:
           path: SuratSarpras.apk
 
       - name: Create or Update GitHub Release
+        if: always()
         uses: softprops/action-gh-release@v2
-        if: github.ref == 'refs/heads/main'
         with:
           tag_name: latest-apk
           name: "Surat Sarpras Android APK (Terbaru)"
@@ -83,3 +83,4 @@ jobs:
           prerelease: false
           files: |
             SuratSarpras.apk
+            build.log
