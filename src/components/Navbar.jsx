@@ -9,7 +9,7 @@ import {
   RefreshCw,
   ArrowDownLeft,
   ArrowUpRight,
-  Cloud,
+  Smartphone,
   X
 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
@@ -23,7 +23,8 @@ export default function Navbar({
   onResetData,
   isDark,
   onToggleTheme,
-  isCloudConnected = true
+  isCloudConnected = true,
+  onOpenInstall
 }) {
   const [showAddMenu, setShowAddMenu] = useState(false);
 
@@ -119,9 +120,19 @@ export default function Navbar({
               </button>
             </nav>
 
-            {/* Right Action Controls: Night/Light Mode Slider, Reset & Add Button */}
+            {/* Right Action Controls: Install App, Theme Toggle, Reset & Add Button */}
             <div className="flex items-center space-x-2 sm:space-x-2.5">
-              {/* Theme Toggle Switch with Sun and Moon only & sliding bullet */}
+              {/* Android App Button */}
+              <button
+                onClick={onOpenInstall}
+                title="Pasang Aplikasi Android (APK)"
+                className="p-2 sm:p-2.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition flex items-center space-x-1"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hidden xl:inline">App Android</span>
+              </button>
+
+              {/* Theme Toggle Switch */}
               <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
 
               <button

@@ -9,6 +9,7 @@ import FileViewerModal from './components/FileViewerModal';
 import PrintSheetModal from './components/PrintSheetModal';
 import DeleteConfirmModal from './components/DeleteConfirmModal';
 import AgendaReportView from './components/AgendaReportView';
+import InstallAppModal from './components/InstallAppModal';
 import Toast from './components/Toast';
 import { dbService } from './services/db';
 import { Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
@@ -52,6 +53,7 @@ export default function App() {
   const [selectedLetterForFile, setSelectedLetterForFile] = useState(null);
   const [selectedLetterForDelete, setSelectedLetterForDelete] = useState(null);
   const [selectedLetterForPrint, setSelectedLetterForPrint] = useState(null);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
 
   // Toast feedback state
   const [toast, setToast] = useState(null);
@@ -86,7 +88,6 @@ export default function App() {
     try {
       const saved = await dbService.saveLetter(letterData);
       
-      // Update selected letter if viewing
       if (selectedLetterForView && selectedLetterForView.id === saved.id) {
         setSelectedLetterForView(saved);
       }
@@ -191,6 +192,7 @@ export default function App() {
         isDark={isDark}
         onToggleTheme={toggleTheme}
         isCloudConnected={isCloudConnected}
+        onOpenInstall={() => setIsInstallModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -353,6 +355,11 @@ export default function App() {
         isOpen={Boolean(selectedLetterForDelete)}
         onClose={() => setSelectedLetterForDelete(null)}
         onConfirm={handleConfirmDelete}
+      />
+
+      <InstallAppModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
       />
 
       {/* Toast Feedback */}

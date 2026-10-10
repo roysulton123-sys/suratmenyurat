@@ -1,0 +1,18 @@
+{
+  "short_name": "Surat Sarpras",
+  "name": "Surat Sarpras • Sistem Persuratan Digital",
+  "description": "Sistem Informasi Manajemen Persuratan Sarana & Prasarana",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f6f8fb",
+  "theme_color": "#2563eb",
+  "display": "standalone",
+  "orientation": "portrait"
+}
