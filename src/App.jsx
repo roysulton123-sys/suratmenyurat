@@ -15,8 +15,8 @@ import { dbService } from './services/db';
 import { Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
 export default function App() {
-  const [letters, setLetters] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [letters, setLetters] = useState(() => dbService.getInitialLettersSync());
+  const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isCloudConnected, setIsCloudConnected] = useState(true);
 
@@ -64,19 +64,27 @@ export default function App() {
 
   // Real-time Cloud Firebase Subscription + Offline Cache
   useEffect(() => {
+    const safetyTimer = setTimeout(() => {
+      setLoading(false);
+    }, 800);
+
     const unsubscribe = dbService.subscribeLetters(
       (updatedLetters, isOnline) => {
+        clearTimeout(safetyTimer);
         setLetters(updatedLetters);
         setIsCloudConnected(isOnline);
         setLoading(false);
       },
       (err) => {
         console.warn('Firebase sync notification:', err?.message);
+        clearTimeout(safetyTimer);
         setIsCloudConnected(false);
+        setLoading(false);
       }
     );
 
     return () => {
+      clearTimeout(safetyTimer);
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
@@ -197,7 +205,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-4 sm:py-6">
-        {loading ? (
+        {loading && letters.length === 0 ? (
           <div className="flex flex-col items-center justify-center min-h-[50vh]">
             <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
             <p className="text-xs text-slate-400 font-bold">Sinkronisasi Surat Sarpras dengan Firebase Cloud...</p>

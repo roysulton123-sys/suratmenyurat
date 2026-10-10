@@ -190,8 +190,41 @@ export const dbService = {
   // Check if online cloud Firebase is active
   isFirebaseActive: true,
 
-  // Real-time listener for Firestore collection
+  // Synchronous cache reader for 0ms instant startup without stuck screen
+  getInitialLettersSync() {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const cached = localStorage.getItem('sarpras_letters_sync_cache');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Sync cache read error:', e);
+    }
+    return INITIAL_DATA;
+  },
+
+  // Real-time listener for Firestore collection with Instant Local Cache Fallback
   subscribeLetters(onUpdate, onError) {
+    // 1. Immediately provide synchronous cache so UI is ready in 0ms
+    const initialSync = this.getInitialLettersSync();
+    if (initialSync && initialSync.length > 0) {
+      onUpdate(initialSync, false);
+    }
+
+    // 2. Also check IndexedDB asynchronously in case it has updated offline data
+    this.getLocalLetters().then((local) => {
+      if (local && local.length > 0) {
+        onUpdate(local, false);
+      }
+    }).catch(() => {
+      onUpdate(INITIAL_DATA, false);
+    });
+
     try {
       const lettersCol = collection(db, 'letters');
       const unsubscribe = onSnapshot(
@@ -202,16 +235,20 @@ export const dbService = {
             snapshot.forEach((d) => items.push(d.data()));
             items.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
             this.isFirebaseActive = true;
+            this.saveToLocalCache(items);
             onUpdate(items, true);
           } else {
             // Firestore is connected but collection is empty -> seed it
             this.seedInitialData().then((seeded) => {
+              this.saveToLocalCache(seeded);
               onUpdate(seeded, true);
+            }).catch(() => {
+              this.getLocalLetters().then((local) => onUpdate(local, false));
             });
           }
         },
         (error) => {
-          console.warn('Firebase onSnapshot warning (using local IndexedDB cache):', error.message);
+          console.warn('Firebase onSnapshot warning (using local cache):', error.message);
           this.isFirebaseActive = false;
           if (onError) onError(error);
           this.getLocalLetters().then((local) => onUpdate(local, false));
@@ -221,6 +258,7 @@ export const dbService = {
     } catch (err) {
       console.warn('Failed to subscribe to Firebase:', err);
       this.isFirebaseActive = false;
+      if (onError) onError(err);
       this.getLocalLetters().then((local) => onUpdate(local, false));
       return () => {};
     }
@@ -251,27 +289,54 @@ export const dbService = {
   },
 
   async getLocalLetters() {
-    const idb = await openDB();
-    return new Promise((resolve, reject) => {
-      const transaction = idb.transaction(STORE_LETTERS, 'readonly');
-      const store = transaction.objectStore(STORE_LETTERS);
-      const request = store.getAll();
+    try {
+      if (typeof window === 'undefined' || !window.indexedDB) {
+        return INITIAL_DATA;
+      }
+      const idb = await openDB();
+      return new Promise((resolve) => {
+        try {
+          const transaction = idb.transaction(STORE_LETTERS, 'readonly');
+          const store = transaction.objectStore(STORE_LETTERS);
+          const request = store.getAll();
 
-      request.onsuccess = () => {
-        let results = request.result;
-        if (!results || results.length === 0) {
-          this.seedInitialData().then((seeded) => resolve(seeded));
-        } else {
-          results.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
-          resolve(results);
+          request.onsuccess = () => {
+            let results = request.result;
+            if (!results || results.length === 0) {
+              this.seedInitialData().then((seeded) => resolve(seeded)).catch(() => resolve(INITIAL_DATA));
+            } else {
+              results.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+              resolve(results);
+            }
+          };
+          request.onerror = () => resolve(INITIAL_DATA);
+        } catch {
+          resolve(INITIAL_DATA);
         }
-      };
-      request.onerror = () => reject(request.error);
-    });
+      });
+    } catch {
+      return INITIAL_DATA;
+    }
   },
 
   async saveToLocalCache(lettersList) {
     try {
+      if (typeof window !== 'undefined' && window.localStorage && Array.isArray(lettersList)) {
+        try {
+          // Keep a lightweight synchronous copy for 0ms cold starts (omit giant base64 data)
+          const slim = lettersList.map((l) => {
+            if (l.file && l.file.base64 && l.file.base64.length > 50000) {
+              const { base64, ...restFile } = l.file;
+              return { ...l, file: restFile };
+            }
+            return l;
+          });
+          localStorage.setItem('sarpras_letters_sync_cache', JSON.stringify(slim));
+        } catch (storageErr) {
+          console.warn('LocalStorage cache write error:', storageErr);
+        }
+      }
+
       const idb = await openDB();
       const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
       const store = transaction.objectStore(STORE_LETTERS);
@@ -284,28 +349,23 @@ export const dbService = {
   },
 
   async seedInitialData() {
-    const idb = await openDB();
-    const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
-    const store = transaction.objectStore(STORE_LETTERS);
-    for (const item of INITIAL_DATA) {
-      store.put(item);
-    }
-
-    // Also attempt seeding to Firestore
     try {
+      const idb = await openDB();
+      const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
+      const store = transaction.objectStore(STORE_LETTERS);
       for (const item of INITIAL_DATA) {
-        await setDoc(doc(db, 'letters', item.id), item);
+        store.put(item);
       }
-      this.isFirebaseActive = true;
-    } catch (err) {
-      console.warn('Could not seed to Firestore (check Firestore Rules):', err.message);
+    } catch (e) {
+      console.warn('Local seed error:', e);
     }
 
-    return new Promise((resolve) => {
-      transaction.oncomplete = () => {
-        resolve(INITIAL_DATA);
-      };
-    });
+    // Background asynchronous seeding to Firestore without blocking UI
+    Promise.all(INITIAL_DATA.map(item => setDoc(doc(db, 'letters', item.id), item)))
+      .then(() => { this.isFirebaseActive = true; })
+      .catch((err) => console.warn('Firestore seeding notice:', err.message));
+
+    return INITIAL_DATA;
   },
 
   async saveLetter(letter) {
