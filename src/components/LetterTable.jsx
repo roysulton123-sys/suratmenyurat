@@ -11,8 +11,6 @@ import {
   Layers,
   ArrowDownLeft,
   ArrowUpRight,
-  LayoutGrid,
-  List,
   ChevronRight
 } from 'lucide-react';
 import { formatDate, STATUS_CONFIG, URGENCY_CONFIG, CATEGORIES } from '../utils/constants';
@@ -31,7 +29,6 @@ export default function LetterTable({
   const [filterUrgency, setFilterUrgency] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [sortBy, setSortBy] = useState('date_desc');
-  const [viewMode, setViewMode] = useState('cards');
 
   const filteredLetters = useMemo(() => {
     return letters.filter((item) => {
@@ -102,12 +99,12 @@ export default function LetterTable({
             )}
           </div>
 
-          {/* Quick Filters */}
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Filters - Responsive Grid on Mobile, Flex on Desktop */}
+          <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-center gap-1.5 sm:gap-2">
             <select
               value={filterCategory}
               onChange={(e) => setFilterCategory(e.target.value)}
-              className="px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/80 rounded-2xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium"
+              className="w-full sm:w-auto px-2.5 sm:px-3.5 py-2 sm:py-2.5 text-[11px] sm:text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/80 rounded-2xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium truncate"
             >
               <option value="">Semua Kategori</option>
               {CATEGORIES.map((cat) => (
@@ -120,7 +117,7 @@ export default function LetterTable({
             <select
               value={filterUrgency}
               onChange={(e) => setFilterUrgency(e.target.value)}
-              className="px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/80 rounded-2xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium"
+              className="w-full sm:w-auto px-2.5 sm:px-3.5 py-2 sm:py-2.5 text-[11px] sm:text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/80 rounded-2xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium truncate"
             >
               <option value="">Semua Sifat</option>
               <option value="Biasa">Biasa</option>
@@ -132,7 +129,7 @@ export default function LetterTable({
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/80 rounded-2xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium"
+              className="w-full sm:w-auto px-2.5 sm:px-3.5 py-2 sm:py-2.5 text-[11px] sm:text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/80 rounded-2xl text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition font-medium truncate"
             >
               <option value="">Semua Status</option>
               <option value="Baru">Baru</option>
@@ -144,54 +141,30 @@ export default function LetterTable({
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="px-3.5 py-2.5 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400 hover:bg-rose-100 rounded-2xl transition font-semibold"
+                className="col-span-3 sm:col-auto px-3.5 py-2 sm:py-2.5 text-[11px] sm:text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/40 dark:text-rose-400 hover:bg-rose-100 rounded-2xl transition font-semibold text-center"
               >
-                Reset
+                Reset Filter
               </button>
             )}
           </div>
         </div>
 
-        {/* View Mode & Count Sub-bar */}
+        {/* Status Count & Sorting Sub-bar (Otomatis tanpa toggle manual) */}
         <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800">
           <div>
             Menampilkan <span className="font-bold text-slate-800 dark:text-white">{filteredLetters.length}</span> berkas
           </div>
-          <div className="flex items-center space-x-3">
-            {/* View Mode Toggle */}
-            <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
-              <button
-                onClick={() => setViewMode('cards')}
-                className={`p-1.5 rounded-lg transition ${
-                  viewMode === 'cards' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-soft' : 'text-slate-500 dark:text-slate-400'
-                }`}
-                title="Tampilan Kartu (Mobile Style)"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setViewMode('table')}
-                className={`p-1.5 rounded-lg transition ${
-                  viewMode === 'table' ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-soft' : 'text-slate-500 dark:text-slate-400'
-                }`}
-                title="Tampilan Tabel Lengkap"
-              >
-                <List className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="flex items-center space-x-1">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">Urutkan:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-transparent border-none text-[11px] font-semibold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
-              >
-                <option value="date_desc" className="dark:bg-slate-900">Terbaru</option>
-                <option value="date_asc" className="dark:bg-slate-900">Terlama</option>
-                <option value="agenda" className="dark:bg-slate-900">No. Agenda</option>
-              </select>
-            </div>
+          <div className="flex items-center space-x-1">
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">Urutkan:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-transparent border-none text-[11px] font-semibold text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+            >
+              <option value="date_desc" className="dark:bg-slate-900">Terbaru</option>
+              <option value="date_asc" className="dark:bg-slate-900">Terlama</option>
+              <option value="agenda" className="dark:bg-slate-900">No. Agenda</option>
+            </select>
           </div>
         </div>
       </div>
@@ -219,8 +192,8 @@ export default function LetterTable({
         </div>
       ) : (
         <>
-          {/* VIEW 1: Mobile Friendly Card List */}
-          <div className={`space-y-3 ${viewMode === 'table' ? 'md:hidden' : ''}`}>
+          {/* VIEW 1: Mobile Friendly Card List (Otomatis Aktif di Layar HP/Mobile) */}
+          <div className="space-y-3 block md:hidden">
             {filteredLetters.map((item) => {
               const isIncoming = item.type === 'masuk';
               const urgencyStyle = URGENCY_CONFIG[item.urgency] || URGENCY_CONFIG.Biasa;
@@ -342,12 +315,8 @@ export default function LetterTable({
             })}
           </div>
 
-          {/* VIEW 2: Desktop Table */}
-          <div
-            className={`hidden ${
-              viewMode === 'table' ? 'md:block' : ''
-            } bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-soft overflow-hidden transition-colors duration-300`}
-          >
+          {/* VIEW 2: Desktop Table (Otomatis Aktif di Layar Desktop & Tablet) */}
+          <div className="hidden md:block bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-soft overflow-hidden transition-colors duration-300">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>

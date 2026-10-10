@@ -143,7 +143,61 @@ export default function AgendaReportView({ letters = [] }) {
             Tidak ada arsip surat pada rentang filter yang dipilih.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile View: Clean Card List (Otomatis Aktif di Layar HP/Mobile) */}
+            <div className="space-y-3 block md:hidden print:hidden">
+              {filteredLetters.map((item, idx) => (
+                <div
+                  key={item.id}
+                  className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[10px] font-bold flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                        {item.agendaNumber}
+                      </span>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        item.type === 'masuk'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300'
+                      }`}
+                    >
+                      {item.type === 'masuk' ? 'Masuk' : 'Keluar'}
+                    </span>
+                  </div>
+
+                  <p className="font-bold text-slate-800 dark:text-white line-clamp-2">
+                    {item.subject}
+                  </p>
+
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
+                    <p className="truncate">
+                      <span className="text-slate-400">{item.type === 'masuk' ? 'Pengirim: ' : 'Tujuan: '}</span>
+                      <strong className="text-slate-700 dark:text-slate-200">{item.senderReceiver}</strong>
+                    </p>
+                    <p className="font-mono text-slate-400 truncate">No: {item.letterNumber}</p>
+                    <p className="text-slate-400">Tgl: {formatDate(item.date)}</p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[10px]">
+                    <span className="font-semibold text-slate-600 dark:text-slate-300">
+                      Sifat: <strong>{item.urgency}</strong>
+                    </span>
+                    <span className="font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                      {item.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop & Print View: Full Table (Otomatis di Desktop/Tablet) */}
+            <div className="hidden md:block print:block overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse border border-slate-300 dark:border-slate-700 print:border-slate-800 font-sans">
               <thead>
                 <tr className="bg-slate-100 dark:bg-slate-800 print:bg-slate-200 text-slate-700 dark:text-slate-200 print:text-slate-700 font-bold border-b border-slate-300 dark:border-slate-700 print:border-slate-800">
@@ -201,7 +255,8 @@ export default function AgendaReportView({ letters = [] }) {
               </tbody>
             </table>
           </div>
-        )}
+        </>
+      )}
 
         {/* Footer signature */}
         <div className="hidden print:grid grid-cols-2 text-xs pt-8 text-center font-sans">
