@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import DashboardView from './components/DashboardView';
 import LetterTable from './components/LetterTable';
@@ -10,9 +10,12 @@ import PrintSheetModal from './components/PrintSheetModal';
 import DeleteConfirmModal from './components/DeleteConfirmModal';
 import AgendaReportView from './components/AgendaReportView';
 import InstallAppModal from './components/InstallAppModal';
+import ExitConfirmModal from './components/ExitConfirmModal';
 import Toast from './components/Toast';
 import { dbService } from './services/db';
 import { Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 
 export default function App() {
   const [letters, setLetters] = useState(() => dbService.getInitialLettersSync());
@@ -54,6 +57,10 @@ export default function App() {
   const [selectedLetterForDelete, setSelectedLetterForDelete] = useState(null);
   const [selectedLetterForPrint, setSelectedLetterForPrint] = useState(null);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
+
+  // Tab navigation history stack
+  const [tabHistory, setTabHistory] = useState(['dashboard']);
 
   // Toast feedback state
   const [toast, setToast] = useState(null);
@@ -61,6 +68,170 @@ export default function App() {
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
   };
+
+  // Navigate to tab and record in history stack
+  const navigateToTab = (tab) => {
+    if (tab === activeTab) return;
+    setTabHistory((prev) => {
+      if (tab === 'dashboard') {
+        return ['dashboard'];
+      }
+      if (prev[prev.length - 1] === tab) return prev;
+      return [...prev, tab];
+    });
+    setActiveTab(tab);
+  };
+
+  // Ref to hold the latest navigation & modal states without stale closures
+  const navStateRef = useRef({
+    activeTab,
+    tabHistory,
+    isFormOpen,
+    selectedLetterForView,
+    selectedLetterForDisposition,
+    selectedLetterForFile,
+    selectedLetterForPrint,
+    selectedLetterForDelete,
+    isInstallModalOpen,
+    isExitConfirmOpen
+  });
+
+  useEffect(() => {
+    navStateRef.current = {
+      activeTab,
+      tabHistory,
+      isFormOpen,
+      selectedLetterForView,
+      selectedLetterForDisposition,
+      selectedLetterForFile,
+      selectedLetterForPrint,
+      selectedLetterForDelete,
+      isInstallModalOpen,
+      isExitConfirmOpen
+    };
+  }, [
+    activeTab,
+    tabHistory,
+    isFormOpen,
+    selectedLetterForView,
+    selectedLetterForDisposition,
+    selectedLetterForFile,
+    selectedLetterForPrint,
+    selectedLetterForDelete,
+    isInstallModalOpen,
+    isExitConfirmOpen
+  ]);
+
+  // Handle back button press (hardware button, gesture, or browser back)
+  const handleBack = () => {
+    const state = navStateRef.current;
+
+    // 1. If Exit Confirm Modal is open, close it
+    if (state.isExitConfirmOpen) {
+      setIsExitConfirmOpen(false);
+      return;
+    }
+
+    // 2. If any sub-modal is open, close that sub-modal first (staying on current page)
+    if (state.selectedLetterForDelete) {
+      setSelectedLetterForDelete(null);
+      return;
+    }
+    if (state.selectedLetterForPrint) {
+      setSelectedLetterForPrint(null);
+      return;
+    }
+    if (state.selectedLetterForFile) {
+      setSelectedLetterForFile(null);
+      return;
+    }
+    if (state.selectedLetterForDisposition) {
+      setSelectedLetterForDisposition(null);
+      return;
+    }
+    if (state.selectedLetterForView) {
+      setSelectedLetterForView(null);
+      return;
+    }
+    if (state.isFormOpen) {
+      setIsFormOpen(false);
+      return;
+    }
+    if (state.isInstallModalOpen) {
+      setIsInstallModalOpen(false);
+      return;
+    }
+
+    // 3. If no modal is open, navigate through tab history until reaching dashboard
+    if (state.tabHistory.length > 1) {
+      const nextHistory = [...state.tabHistory];
+      nextHistory.pop();
+      const prevTab = nextHistory[nextHistory.length - 1] || 'dashboard';
+      setTabHistory(nextHistory);
+      setActiveTab(prevTab);
+      return;
+    }
+
+    if (state.activeTab !== 'dashboard') {
+      setTabHistory(['dashboard']);
+      setActiveTab('dashboard');
+      return;
+    }
+
+    // 4. Already on the main dashboard (halaman utama) with no modals open:
+    // Prompt exit confirmation dialog: "Anda yakin ingin keluar"
+    setIsExitConfirmOpen(true);
+  };
+
+  const handleConfirmExit = async () => {
+    setIsExitConfirmOpen(false);
+    try {
+      if (Capacitor.isNativePlatform()) {
+        await CapacitorApp.exitApp();
+      } else {
+        window.close();
+        showToast('Keluar dari aplikasi', 'info');
+      }
+    } catch (err) {
+      console.warn('Exit app handler notice:', err);
+    }
+  };
+
+  // Android Native (Capacitor) & Mobile Browser Back Button Event Listeners
+  useEffect(() => {
+    let nativeListener = null;
+
+    const setupListeners = async () => {
+      try {
+        if (Capacitor.isNativePlatform()) {
+          nativeListener = await CapacitorApp.addListener('backButton', () => {
+            handleBack();
+          });
+        }
+      } catch (err) {
+        console.warn('Capacitor backButton setup notice:', err);
+      }
+    };
+
+    setupListeners();
+
+    // Browser history popstate handler for mobile browsers / PWA
+    const handlePopState = (e) => {
+      e.preventDefault();
+      handleBack();
+      window.history.pushState({ app: 'surat-sarpras' }, '');
+    };
+
+    window.history.pushState({ app: 'surat-sarpras-init' }, '');
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      if (nativeListener && typeof nativeListener.remove === 'function') {
+        nativeListener.remove();
+      }
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   // Real-time Cloud Firebase Subscription + Offline Cache
   useEffect(() => {
@@ -179,7 +350,7 @@ export default function App() {
       {/* Top Header Navigation */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={navigateToTab}
         masukCount={masukLettersCount}
         keluarCount={keluarLettersCount}
         onAddNew={openAddNew}
@@ -204,7 +375,7 @@ export default function App() {
                 letters={letters}
                 onAddNew={openAddNew}
                 onView={openView}
-                onNavigateTab={setActiveTab}
+                onNavigateTab={navigateToTab}
               />
             )}
 
@@ -354,6 +525,13 @@ export default function App() {
       <InstallAppModal
         isOpen={isInstallModalOpen}
         onClose={() => setIsInstallModalOpen(false)}
+      />
+
+      {/* Exit Confirmation Modal */}
+      <ExitConfirmModal
+        isOpen={isExitConfirmOpen}
+        onClose={() => setIsExitConfirmOpen(false)}
+        onConfirm={handleConfirmExit}
       />
 
       {/* Toast Feedback */}
