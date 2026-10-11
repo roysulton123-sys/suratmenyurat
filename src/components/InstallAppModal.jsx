@@ -41,8 +41,8 @@ export default function InstallAppModal({ isOpen, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-ocazte">
-              <Smartphone className="w-6 h-6 stroke-[2.2]" />
+            <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-ocazte p-0.5 bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 flex items-center justify-center">
+              <img src="/app-icon.png" alt="Surat Sarpras" className="w-full h-full object-cover rounded-[14px]" />
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-800 dark:text-white">

@@ -36,8 +36,8 @@ export default function Navbar({
               className="flex items-center space-x-3 cursor-pointer group"
               onClick={() => setActiveTab('dashboard')}
             >
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-ocazte group-hover:scale-105 transition-transform">
-                <Mail className="w-6 h-6 stroke-[2.2]" />
+              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-ocazte group-hover:scale-105 transition-transform overflow-hidden p-0.5">
+                <img src="/app-icon.png" alt="Surat Sarpras" className="w-full h-full object-cover rounded-[14px]" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
