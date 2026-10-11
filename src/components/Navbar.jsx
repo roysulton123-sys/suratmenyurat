@@ -5,8 +5,7 @@ import {
   LayoutDashboard,
   BookOpen,
   Plus,
-  Building2,
-  RefreshCw,
+  Mail,
   ArrowDownLeft,
   ArrowUpRight,
   X
@@ -19,7 +18,6 @@ export default function Navbar({
   masukCount = 0,
   keluarCount = 0,
   onAddNew,
-  onResetData,
   isDark,
   onToggleTheme,
   isCloudConnected = true,
@@ -39,7 +37,7 @@ export default function Navbar({
               onClick={() => setActiveTab('dashboard')}
             >
               <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-ocazte group-hover:scale-105 transition-transform">
-                <Building2 className="w-6 h-6 stroke-[2.2]" />
+                <Mail className="w-6 h-6 stroke-[2.2]" />
               </div>
               <div>
                 <div className="flex items-center space-x-2">
@@ -119,18 +117,10 @@ export default function Navbar({
               </button>
             </nav>
 
-            {/* Right Action Controls: Theme Toggle, Reset & Add Button */}
+            {/* Right Action Controls: Theme Toggle & Add Button */}
             <div className="flex items-center space-x-2 sm:space-x-2.5">
               {/* Theme Toggle Switch */}
               <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
-
-              <button
-                onClick={onResetData}
-                title="Muat Ulang Data Contoh Sarpras"
-                className="p-2 sm:p-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
 
               <button
                 onClick={() => onAddNew('masuk')}

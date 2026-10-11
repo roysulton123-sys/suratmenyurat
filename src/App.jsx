@@ -139,19 +139,6 @@ export default function App() {
     }
   };
 
-  // Reset sample data
-  const handleResetData = async () => {
-    if (window.confirm('Muat ulang data contoh persuratan Sarpras ke Firebase?')) {
-      try {
-        const seeded = await dbService.resetData();
-        setLetters(seeded);
-        showToast('Data contoh Sarpras berhasil dimuat ulang');
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
-
   // Modal openers
   const openAddNew = (type = 'masuk') => {
     setFormDefaultType(type);
@@ -196,7 +183,6 @@ export default function App() {
         masukCount={masukLettersCount}
         keluarCount={keluarLettersCount}
         onAddNew={openAddNew}
-        onResetData={handleResetData}
         isDark={isDark}
         onToggleTheme={toggleTheme}
         isCloudConnected={isCloudConnected}

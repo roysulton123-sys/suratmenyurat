@@ -473,30 +473,5 @@ export const dbService = {
       request.onsuccess = () => resolve(true);
       request.onerror = () => reject(request.error);
     });
-  },
-
-  async resetData() {
-    // Reset Firestore if possible
-    try {
-      const lettersCol = collection(db, 'letters');
-      const snapshot = await getDocs(lettersCol);
-      for (const d of snapshot.docs) {
-        await deleteDoc(d.ref);
-      }
-    } catch (err) {
-      console.warn('Reset Firestore error:', err);
-    }
-
-    // Reset IndexedDB
-    const idb = await openDB();
-    const transaction = idb.transaction([STORE_LETTERS, STORE_ATTACHMENTS], 'readwrite');
-    transaction.objectStore(STORE_LETTERS).clear();
-    transaction.objectStore(STORE_ATTACHMENTS).clear();
-    return new Promise((resolve) => {
-      transaction.oncomplete = async () => {
-        const seeded = await this.seedInitialData();
-        resolve(seeded);
-      };
-    });
   }
 };
