@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, Image as ImageIcon, ExternalLink, Eye } from 'lucide-react';
+import { X, Download, FileText, Image as ImageIcon, ExternalLink, Eye, Check, Loader2 } from 'lucide-react';
 import { dbService } from '../services/db';
 import { formatFileSize } from '../utils/constants';
+import { downloadAttachment } from '../utils/fileHelper';
 import PdfViewer from './PdfViewer';
 
 export default function FileViewerModal({ letter, onClose }) {
   const [fileUrl, setFileUrl] = useState(null);
   const [dataUrl, setDataUrl] = useState(null);
+  const [storedBlob, setStoredBlob] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
   const file = letter?.file;
 
   useEffect(() => {
@@ -31,15 +35,16 @@ export default function FileViewerModal({ letter, onClose }) {
         if (isCancelled) return;
 
         if (stored) {
+          if (stored.blob) {
+            setStoredBlob(stored.blob);
+            activeUrl = URL.createObjectURL(stored.blob);
+            setFileUrl(activeUrl);
+          }
           if (stored.dataUrl) {
             setDataUrl(stored.dataUrl);
             if (!activeUrl) {
               setFileUrl(stored.dataUrl);
             }
-          }
-          if (stored.blob) {
-            activeUrl = URL.createObjectURL(stored.blob);
-            setFileUrl(activeUrl);
           }
         } else if (file.cloudUrl) {
           setFileUrl(file.cloudUrl);
@@ -69,56 +74,23 @@ export default function FileViewerModal({ letter, onClose }) {
   const isPdf = file.type === 'application/pdf' || (file.name || '').toLowerCase().endsWith('.pdf');
 
   const handleDownload = async () => {
-    const downloadSource = dataUrl || fileUrl;
-    if (downloadSource) {
-      if (downloadSource.startsWith('data:') || downloadSource.startsWith('blob:')) {
-        const a = document.createElement('a');
-        a.href = downloadSource;
-        a.download = file.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        try {
-          const res = await fetch(downloadSource);
-          const blob = await res.blob();
-          const objUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = objUrl;
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(objUrl);
-        } catch {
-          window.open(downloadSource, '_blank');
-        }
-      }
-    } else if (file.mockSample) {
-      const content = `SURAT SARPRAS - ARSIP ELEKTRONIK RESMI
-========================================
-Nomor Surat: ${letter.letterNumber}
-Nomor Agenda: ${letter.agendaNumber}
-Tanggal: ${letter.date}
-Perihal: ${letter.subject}
-${letter.type === 'masuk' ? 'Pengirim' : 'Penerima'}: ${letter.senderReceiver}
-Kategori: ${letter.category}
-Sifat: ${letter.urgency}
-Status: ${letter.status}
-Catatan: ${letter.notes || '-'}
-========================================
-Lampiran Berkas: ${file.name}
-Divisi Sarana & Prasarana
-`;
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = file.name.replace('.pdf', '.txt');
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    if (downloading) return;
+    try {
+      setDownloading(true);
+      await downloadAttachment({
+        letter,
+        file,
+        dataUrl,
+        blob: storedBlob,
+        cloudUrl: fileUrl
+      });
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 2500);
+    } catch (err) {
+      console.error('Download error:', err);
+      alert('Gagal mengunduh berkas: ' + (err.message || 'Silakan coba lagi.'));
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -144,12 +116,25 @@ Divisi Sarana & Prasarana
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             <button
               type="button"
+              disabled={downloading}
               onClick={handleDownload}
-              className="inline-flex items-center space-x-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-700 transition shadow-soft"
+              className={`inline-flex items-center space-x-1.5 px-3 py-2 text-xs font-bold rounded-2xl transition shadow-soft border ${
+                downloadSuccess
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                  : 'text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
               title="Unduh Berkas ke Perangkat"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Unduh</span>
+              {downloading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+              ) : downloadSuccess ? (
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">
+                {downloading ? 'Mengunduh...' : downloadSuccess ? 'Tersimpan' : 'Unduh'}
+              </span>
             </button>
             {(fileUrl || dataUrl) && (
               <a

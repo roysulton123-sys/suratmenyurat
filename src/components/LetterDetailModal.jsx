@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Edit2,
@@ -14,9 +14,13 @@ import {
   Eye,
   PlusCircle,
   MessageSquare,
-  Paperclip
+  Paperclip,
+  Download,
+  Loader2,
+  Check
 } from 'lucide-react';
 import { formatDate, formatDateTime, formatFileSize, STATUS_CONFIG, URGENCY_CONFIG } from '../utils/constants';
+import { downloadAttachment } from '../utils/fileHelper';
 
 export default function LetterDetailModal({
   letter,
@@ -28,7 +32,25 @@ export default function LetterDetailModal({
   onViewFile,
   onPrintSheet
 }) {
+  const [downloading, setDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
   if (!isOpen || !letter) return null;
+
+  const handleDownload = async () => {
+    if (downloading) return;
+    try {
+      setDownloading(true);
+      await downloadAttachment({ letter });
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 2500);
+    } catch (err) {
+      console.error('Download error:', err);
+      alert('Gagal mengunduh berkas: ' + (err.message || 'Silakan coba lagi.'));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const urgencyStyle = URGENCY_CONFIG[letter.urgency] || URGENCY_CONFIG.Biasa;
   const statusStyle = STATUS_CONFIG[letter.status] || STATUS_CONFIG.Baru;
@@ -215,13 +237,37 @@ export default function LetterDetailModal({
                   </div>
                 </div>
 
-                <button
-                  onClick={() => onViewFile(letter)}
-                  className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-800 rounded-xl hover:bg-blue-50 dark:hover:bg-slate-700 shadow-soft transition ml-2 shrink-0"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>Buka Berkas</span>
-                </button>
+                <div className="flex items-center space-x-1.5 ml-2 shrink-0">
+                  <button
+                    type="button"
+                    disabled={downloading}
+                    onClick={handleDownload}
+                    className={`inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-xl border transition shadow-soft ${
+                      downloadSuccess
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                        : 'text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    }`}
+                    title="Unduh Berkas ke Perangkat"
+                  >
+                    {downloading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                    ) : downloadSuccess ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5" />
+                    )}
+                    <span>{downloading ? 'Mengunduh...' : downloadSuccess ? 'Tersimpan' : 'Unduh'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onViewFile(letter)}
+                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 border border-blue-600 rounded-xl shadow-soft transition"
+                    title="Buka Pratinjau Berkas"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>Buka Berkas</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="p-4 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-center text-xs text-slate-400">

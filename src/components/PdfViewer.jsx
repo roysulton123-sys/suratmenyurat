@@ -13,8 +13,14 @@ import {
   Loader2
 } from 'lucide-react';
 
+const CDN_WORKER_URL = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`;
+
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker || CDN_WORKER_URL;
+  } catch (e) {
+    console.warn('PDF worker init warning:', e);
+  }
 }
 
 export default function PdfViewer({ fileUrl, dataUrl, fileName, onDownload }) {
@@ -35,26 +41,47 @@ export default function PdfViewer({ fileUrl, dataUrl, fileName, onDownload }) {
     setLoading(true);
     setError(null);
 
+    async function getDocumentTask(useCdnWorker = false) {
+      if (useCdnWorker) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = CDN_WORKER_URL;
+      }
+
+      if (dataUrl && dataUrl.startsWith('data:')) {
+        const base64 = dataUrl.split(',')[1];
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        return pdfjsLib.getDocument({
+          data: bytes,
+          cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+          cMapPacked: true
+        });
+      } else if (fileUrl) {
+        return pdfjsLib.getDocument({
+          url: fileUrl,
+          cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+          cMapPacked: true
+        });
+      } else {
+        throw new Error('Sumber data PDF tidak ditemukan.');
+      }
+    }
+
     async function loadPdf() {
       try {
-        let loadingTask = null;
-
-        if (dataUrl && dataUrl.startsWith('data:')) {
-          const base64 = dataUrl.split(',')[1];
-          const binaryString = atob(base64);
-          const len = binaryString.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          loadingTask = pdfjsLib.getDocument({ data: bytes });
-        } else if (fileUrl) {
-          loadingTask = pdfjsLib.getDocument(fileUrl);
-        } else {
-          throw new Error('Sumber data PDF tidak ditemukan.');
+        let doc = null;
+        try {
+          const loadingTask = await getDocumentTask(false);
+          doc = await loadingTask.promise;
+        } catch (initialErr) {
+          console.warn('Initial PDF load failed, trying CDN worker fallback:', initialErr);
+          const fallbackTask = await getDocumentTask(true);
+          doc = await fallbackTask.promise;
         }
 
-        const doc = await loadingTask.promise;
         if (isCancelled) return;
         setPdfDoc(doc);
         setNumPages(doc.numPages);
@@ -79,7 +106,7 @@ export default function PdfViewer({ fileUrl, dataUrl, fileName, onDownload }) {
       } catch (err) {
         if (isCancelled) return;
         console.error('PDF load error:', err);
-        setError('Gagal membaca dokumen PDF: ' + (err.message || ''));
+        setError('Gagal membaca dokumen PDF: ' + (err.message || 'Format tidak didukung'));
         setLoading(false);
       }
     }
