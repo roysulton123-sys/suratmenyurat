@@ -108,18 +108,39 @@ export default function LetterFormModal({ isOpen, onClose, onSave, initialData, 
     try {
       const letterId = initialData?.id || `${formData.type === 'masuk' ? 'sm' : 'sk'}-${Date.now()}`;
       
+      let fileMeta = formData.file;
       if (selectedFileObj) {
-        await dbService.saveAttachmentFile(
-          letterId,
-          selectedFileObj,
-          selectedFileObj.name,
-          selectedFileObj.type
-        );
+        try {
+          const savedAttachment = await dbService.saveAttachmentFile(
+            letterId,
+            selectedFileObj,
+            selectedFileObj.name,
+            selectedFileObj.type
+          );
+          fileMeta = {
+            name: selectedFileObj.name,
+            size: selectedFileObj.size,
+            type: selectedFileObj.type,
+            mockSample: false,
+            hasAttachment: true,
+            cloudUrl: savedAttachment?.cloudUrl || null
+          };
+        } catch (attachErr) {
+          console.warn('Attachment upload fallback notice:', attachErr);
+          fileMeta = {
+            name: selectedFileObj.name,
+            size: selectedFileObj.size,
+            type: selectedFileObj.type,
+            mockSample: false,
+            hasAttachment: false
+          };
+        }
       }
 
       const letterPayload = {
         ...formData,
         id: letterId,
+        file: fileMeta,
         createdAt: initialData?.createdAt || new Date().toISOString()
       };
 
@@ -127,7 +148,7 @@ export default function LetterFormModal({ isOpen, onClose, onSave, initialData, 
       onClose();
     } catch (err) {
       console.error('Error saving letter:', err);
-      setErrors({ form: 'Terjadi kesalahan saat menyimpan data surat.' });
+      setErrors({ form: 'Terjadi kesalahan saat menyimpan data surat: ' + (err?.message || '') });
     } finally {
       setIsSubmitting(false);
     }

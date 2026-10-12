@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDoc,
   setDoc,
   deleteDoc,
   onSnapshot
@@ -13,6 +14,8 @@ import {
   getDownloadURL,
   deleteObject
 } from 'firebase/storage';
+import { App as CapacitorApp } from '@capacitor/app';
+import { Capacitor } from '@capacitor/core';
 import { db, storage } from './firebase';
 
 const DB_NAME = 'SuratSarprasDB';
@@ -23,6 +26,35 @@ const STORE_ATTACHMENTS = 'attachments';
 const PENDING_UPLOADS_KEY = 'sarpras_pending_uploads';
 const PENDING_DELETES_KEY = 'sarpras_pending_deletes';
 const DELETED_IDS_KEY = 'sarpras_deleted_ids';
+
+// Helper to convert File/Blob to Base64 Data URL
+function fileToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Helper to convert Base64 Data URL back to Blob
+function dataUrlToBlob(dataUrl) {
+  try {
+    const arr = dataUrl.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  } catch (e) {
+    console.warn('DataURL to Blob conversion error:', e);
+    return new Blob([], { type: 'application/octet-stream' });
+  }
+}
 
 // Initial realistic Sarpras mock data
 const INITIAL_DATA = [
@@ -388,7 +420,7 @@ export const dbService = {
     try {
       const lettersCol = collection(db, 'letters');
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Koneksi waktu habis (Timeout)')), 6000)
+        setTimeout(() => reject(new Error('Koneksi waktu habis (Timeout)')), 12000)
       );
       const snapshot = await Promise.race([getDocs(lettersCol), timeoutPromise]);
 
@@ -579,8 +611,8 @@ export const dbService = {
       }
     }, 10000);
 
-    // Reconnect and auto-sync immediately when window gains focus or online event fires
-    const handleWindowFocus = () => {
+    // Reconnect and auto-sync immediately when window gains focus, app resumes, or online event fires
+    const triggerResync = () => {
       connectListener();
       this.syncLocalToCloud().then((res) => {
         if (res.success && res.letters && isSubscribed) {
@@ -590,19 +622,34 @@ export const dbService = {
       }).catch(() => {});
     };
 
-    const handleOnline = () => {
-      connectListener();
-      this.syncLocalToCloud().then((res) => {
-        if (res.success && res.letters && isSubscribed) {
-          const currentDeleted = this.getDeletedIds();
-          onUpdate(res.letters.filter((l) => !currentDeleted.has(l.id)), true);
-        }
-      }).catch(() => {});
+    const handleWindowFocus = () => triggerResync();
+    const handleOnline = () => triggerResync();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        triggerResync();
+      }
     };
+
+    let nativeAppListener = null;
 
     if (typeof window !== 'undefined') {
       window.addEventListener('focus', handleWindowFocus);
       window.addEventListener('online', handleOnline);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      if (Capacitor && Capacitor.isNativePlatform()) {
+        try {
+          CapacitorApp.addListener('appStateChange', (state) => {
+            if (state.isActive) {
+              triggerResync();
+            }
+          }).then((handle) => {
+            nativeAppListener = handle;
+          }).catch(() => {});
+        } catch {
+          // ignore
+        }
+      }
     }
 
     return () => {
@@ -619,11 +666,15 @@ export const dbService = {
       if (typeof window !== 'undefined') {
         window.removeEventListener('focus', handleWindowFocus);
         window.removeEventListener('online', handleOnline);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        if (nativeAppListener && typeof nativeAppListener.remove === 'function') {
+          nativeAppListener.remove();
+        }
       }
     };
   },
 
-  // Upload any local items that haven't been synced to Firestore yet
+  // Upload any local items that were explicitly created/edited offline
   async reconcileLocalPendingToCloud(remoteLetters) {
     try {
       const deletedIds = this.getDeletedIds();
@@ -640,12 +691,13 @@ export const dbService = {
         }
       }
 
-      const remoteIds = new Set(remoteLetters.map((l) => l.id));
+      if (pendingUploads.length === 0) return;
+
       const localLetters = await this.getLocalLetters();
 
       for (const local of localLetters) {
         if (deletedIds.has(local.id)) continue;
-        if (!remoteIds.has(local.id) || pendingUploads.includes(local.id)) {
+        if (pendingUploads.includes(local.id)) {
           try {
             await setDoc(doc(db, 'letters', local.id), local);
             this.removePendingUpload(local.id);
@@ -676,6 +728,7 @@ export const dbService = {
 
     try {
       const deletedIds = this.getDeletedIds();
+      const pendingUploads = this.getPendingUploads();
 
       // 2. Process all pending deletes
       const pendingDeletes = this.getPendingDeletes();
@@ -711,7 +764,7 @@ export const dbService = {
 
       const mergedMap = new Map();
 
-      // If remote is empty, seed active local letters
+      // If remote is empty, seed active local letters only if remote was never populated
       if (remoteMap.size === 0) {
         const toUpload = localLetters.filter((l) => !deletedIds.has(l.id));
         for (const item of toUpload) {
@@ -719,30 +772,28 @@ export const dbService = {
           mergedMap.set(item.id, item);
         }
       } else {
-        // Upload any local letter not present in remote or newer
-        for (const [id, localItem] of localMap.entries()) {
+        // Remote is authoritative source. Only push local letters that are in pendingUploads or strictly newer.
+        for (const [id, remoteItem] of remoteMap.entries()) {
           if (deletedIds.has(id)) continue;
-          const remoteItem = remoteMap.get(id);
-          if (!remoteItem) {
-            await setDoc(doc(db, 'letters', id), localItem);
-            mergedMap.set(id, localItem);
-          } else {
+          const localItem = localMap.get(id);
+          if (localItem && pendingUploads.includes(id)) {
             const localDate = new Date(localItem.updatedAt || localItem.createdAt || 0);
             const remoteDate = new Date(remoteItem.updatedAt || remoteItem.createdAt || 0);
             if (localDate > remoteDate) {
               await setDoc(doc(db, 'letters', id), localItem);
               mergedMap.set(id, localItem);
-            } else {
-              mergedMap.set(id, remoteItem);
+              continue;
             }
           }
+          mergedMap.set(id, remoteItem);
         }
 
-        // Include any remote letters not present in local
-        for (const [id, remoteItem] of remoteMap.entries()) {
+        // Only push local items that are absent in remote IF they are explicitly in pendingUploads!
+        for (const [id, localItem] of localMap.entries()) {
           if (deletedIds.has(id)) continue;
-          if (!mergedMap.has(id)) {
-            mergedMap.set(id, remoteItem);
+          if (!remoteMap.has(id) && pendingUploads.includes(id)) {
+            await setDoc(doc(db, 'letters', id), localItem);
+            mergedMap.set(id, localItem);
           }
         }
       }
@@ -898,6 +949,7 @@ export const dbService = {
       const idb = await openDB();
       const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
       const store = transaction.objectStore(STORE_LETTERS);
+      store.clear();
       for (const item of activeList) {
         store.put(item);
       }
@@ -914,6 +966,7 @@ export const dbService = {
       const idb = await openDB();
       const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
       const store = transaction.objectStore(STORE_LETTERS);
+      store.clear();
       for (const item of activeInitial) {
         store.put(item);
       }
@@ -1095,49 +1148,226 @@ export const dbService = {
   },
 
   async saveAttachmentFile(letterId, fileBlob, fileName, fileType) {
-    let cloudDownloadUrl = null;
+    if (!letterId || !fileBlob) return null;
 
-    // 1. Try uploading to Firebase Cloud Storage
+    let cloudDownloadUrl = null;
+    let dataUrl = null;
+
+    // 1. Convert fileBlob to Base64 dataUrl
+    try {
+      dataUrl = await fileToDataUrl(fileBlob);
+    } catch (readErr) {
+      console.warn('File read error:', readErr);
+    }
+
+    // 2. Save attachment to Firestore letter_attachments collection (cross-device cloud sync!)
+    if (dataUrl) {
+      try {
+        const CHUNK_SIZE = 400000; // 400KB chunks (well within Firestore 1MB limit)
+        if (dataUrl.length <= CHUNK_SIZE) {
+          await setDoc(doc(db, 'letter_attachments', letterId), {
+            id: letterId,
+            name: fileName,
+            type: fileType,
+            size: fileBlob.size,
+            dataUrl: dataUrl,
+            chunksCount: 1,
+            updatedAt: new Date().toISOString()
+          });
+        } else {
+          const chunks = [];
+          for (let i = 0; i < dataUrl.length; i += CHUNK_SIZE) {
+            chunks.push(dataUrl.slice(i, i + CHUNK_SIZE));
+          }
+
+          await setDoc(doc(db, 'letter_attachments', letterId), {
+            id: letterId,
+            name: fileName,
+            type: fileType,
+            size: fileBlob.size,
+            chunksCount: chunks.length,
+            updatedAt: new Date().toISOString()
+          });
+
+          await Promise.all(
+            chunks.map((chunk, i) =>
+              setDoc(doc(db, 'letter_attachments', `${letterId}_chunk_${i}`), {
+                chunkIndex: i,
+                data: chunk
+              })
+            )
+          );
+        }
+      } catch (cloudErr) {
+        console.warn('Firestore attachment save notice:', cloudErr);
+      }
+    }
+
+    // 3. Try Firebase Cloud Storage with strict 3-second timeout (never hang!)
     try {
       const cleanFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
       const fileRef = ref(storage, `attachments/${letterId}_${cleanFileName}`);
-      const uploadResult = await uploadBytes(fileRef, fileBlob);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Storage timeout')), 3000)
+      );
+      const uploadResult = await Promise.race([
+        uploadBytes(fileRef, fileBlob),
+        timeoutPromise
+      ]);
       cloudDownloadUrl = await getDownloadURL(uploadResult.ref);
-    } catch (err) {
-      console.warn('Firebase Storage upload notice (using local storage):', err.message);
+    } catch {
+      // Storage bucket not configured or timeout - safe fallback to Firestore
     }
 
-    // 2. Save locally to IndexedDB as reliable cache
-    const idb = await openDB();
-    return new Promise((resolve, reject) => {
-      const transaction = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
-      const store = transaction.objectStore(STORE_ATTACHMENTS);
-      const data = {
-        id: letterId,
-        blob: fileBlob,
-        name: fileName,
-        type: fileType,
-        cloudUrl: cloudDownloadUrl,
-        uploadedAt: new Date().toISOString()
-      };
-      const request = store.put(data);
-      request.onsuccess = () => resolve(data);
-      request.onerror = () => reject(request.error);
-    });
+    // 4. Save locally to IndexedDB as reliable cache
+    const resultData = {
+      id: letterId,
+      blob: fileBlob,
+      dataUrl: dataUrl,
+      name: fileName,
+      type: fileType,
+      size: fileBlob.size,
+      cloudUrl: cloudDownloadUrl,
+      uploadedAt: new Date().toISOString()
+    };
+
+    try {
+      const idb = await openDB();
+      if (idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
+        await new Promise((resolve) => {
+          try {
+            const tx = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
+            tx.objectStore(STORE_ATTACHMENTS).put(resultData);
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+          } catch {
+            resolve();
+          }
+        });
+      }
+    } catch (idbErr) {
+      console.warn('IndexedDB attachment save notice:', idbErr);
+    }
+
+    return resultData;
   },
 
   async getAttachmentFile(letterId) {
-    const idb = await openDB();
-    return new Promise((resolve, reject) => {
-      const transaction = idb.transaction(STORE_ATTACHMENTS, 'readonly');
-      const store = transaction.objectStore(STORE_ATTACHMENTS);
-      const request = store.get(letterId);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+    if (!letterId) return null;
+
+    // 1. Try reading from local IndexedDB first (0ms cache)
+    try {
+      const idb = await openDB();
+      if (idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
+        const local = await new Promise((resolve) => {
+          try {
+            const tx = idb.transaction(STORE_ATTACHMENTS, 'readonly');
+            const req = tx.objectStore(STORE_ATTACHMENTS).get(letterId);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => resolve(null);
+          } catch {
+            resolve(null);
+          }
+        });
+
+        if (local && (local.blob || local.dataUrl)) {
+          if (!local.blob && local.dataUrl) {
+            local.blob = dataUrlToBlob(local.dataUrl);
+          }
+          return local;
+        }
+      }
+    } catch (e) {
+      console.warn('Local attachment read notice:', e);
+    }
+
+    // 2. Fetch from Firestore letter_attachments (cross-device retrieval)
+    try {
+      const masterRef = doc(db, 'letter_attachments', letterId);
+      const masterSnap = await getDoc(masterRef);
+      if (masterSnap.exists()) {
+        const master = masterSnap.data();
+        let fullDataUrl = master.dataUrl || '';
+
+        if (master.chunksCount > 1) {
+          const chunkPromises = [];
+          for (let i = 0; i < master.chunksCount; i++) {
+            chunkPromises.push(
+              getDoc(doc(db, 'letter_attachments', `${letterId}_chunk_${i}`))
+            );
+          }
+          const chunkSnaps = await Promise.all(chunkPromises);
+          const chunkParts = chunkSnaps.map((s) => (s.exists() ? s.data().data : ''));
+          fullDataUrl = chunkParts.join('');
+        }
+
+        if (fullDataUrl) {
+          const fileBlob = dataUrlToBlob(fullDataUrl);
+          const attachmentObj = {
+            id: letterId,
+            name: master.name,
+            type: master.type,
+            size: master.size,
+            blob: fileBlob,
+            dataUrl: fullDataUrl,
+            cloudUrl: master.cloudUrl || null,
+            uploadedAt: master.updatedAt || new Date().toISOString()
+          };
+
+          // Cache in local IndexedDB for future instant views
+          try {
+            const idb = await openDB();
+            if (idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
+              const tx = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
+              tx.objectStore(STORE_ATTACHMENTS).put(attachmentObj);
+            }
+          } catch {
+            // cache ignore
+          }
+
+          return attachmentObj;
+        }
+      }
+    } catch (err) {
+      console.warn('Cloud attachment fetch notice:', err);
+    }
+
+    return null;
   },
 
   async deleteAttachment(letterId) {
+    if (!letterId) return true;
+
+    // 1. Delete from local IndexedDB
+    try {
+      const idb = await openDB();
+      if (idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
+        const tx = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
+        tx.objectStore(STORE_ATTACHMENTS).delete(letterId);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Delete from Firestore letter_attachments (master + chunks)
+    try {
+      const masterRef = doc(db, 'letter_attachments', letterId);
+      const masterSnap = await getDoc(masterRef);
+      if (masterSnap.exists()) {
+        const master = masterSnap.data();
+        const deleteOps = [deleteDoc(masterRef)];
+        if (master.chunksCount > 1) {
+          for (let i = 0; i < master.chunksCount; i++) {
+            deleteOps.push(deleteDoc(doc(db, 'letter_attachments', `${letterId}_chunk_${i}`)));
+          }
+        }
+        await Promise.all(deleteOps);
+      }
+    } catch {
+      // ignore
+    }
+
+    // 3. Delete from Firebase Storage if existed
     try {
       const fileRef = ref(storage, `attachments/${letterId}`);
       await deleteObject(fileRef);
@@ -1145,24 +1375,6 @@ export const dbService = {
       // ignore
     }
 
-    try {
-      const idb = await openDB();
-      return new Promise((resolve) => {
-        try {
-          if (!idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
-            return resolve(true);
-          }
-          const transaction = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
-          const store = transaction.objectStore(STORE_ATTACHMENTS);
-          const request = store.delete(letterId);
-          request.onsuccess = () => resolve(true);
-          request.onerror = () => resolve(true);
-        } catch {
-          resolve(true);
-        }
-      });
-    } catch {
-      return true;
-    }
+    return true;
   }
 };

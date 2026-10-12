@@ -22,13 +22,18 @@ export default function FileViewerModal({ letter, onClose }) {
       }
 
       try {
+        setLoading(true);
         const stored = await dbService.getAttachmentFile(letter.id);
         if (stored && stored.blob) {
           activeUrl = URL.createObjectURL(stored.blob);
           setFileUrl(activeUrl);
+        } else if (stored && stored.dataUrl) {
+          setFileUrl(stored.dataUrl);
+        } else if (file.cloudUrl) {
+          setFileUrl(file.cloudUrl);
         }
       } catch (err) {
-        console.error('Failed to load attachment from IndexedDB', err);
+        console.error('Failed to load attachment:', err);
       } finally {
         setLoading(false);
       }
@@ -48,12 +53,31 @@ export default function FileViewerModal({ letter, onClose }) {
   const isImage = file.type?.startsWith('image/');
   const isPdf = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (fileUrl) {
-      const a = document.createElement('a');
-      a.href = fileUrl;
-      a.download = file.name;
-      a.click();
+      if (fileUrl.startsWith('data:') || fileUrl.startsWith('blob:')) {
+        const a = document.createElement('a');
+        a.href = fileUrl;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        try {
+          const res = await fetch(fileUrl);
+          const blob = await res.blob();
+          const objUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = objUrl;
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(objUrl);
+        } catch {
+          window.open(fileUrl, '_blank');
+        }
+      }
     } else if (file.mockSample) {
       const content = `SURAT SARPRAS - ARSIP ELEKTRONIK RESMI
 ========================================
