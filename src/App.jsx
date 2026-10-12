@@ -267,17 +267,29 @@ export default function App() {
     try {
       const saved = await dbService.saveLetter(letterData);
       
+      // Update local React state immediately so UI updates instantly
+      setLetters((prev) => {
+        const index = prev.findIndex((l) => l.id === saved.id);
+        if (index >= 0) {
+          const updated = [...prev];
+          updated[index] = saved;
+          return updated;
+        } else {
+          return [saved, ...prev];
+        }
+      });
+
       if (selectedLetterForView && selectedLetterForView.id === saved.id) {
         setSelectedLetterForView(saved);
       }
       showToast(
         selectedLetterForEdit
-          ? 'Perubahan surat berhasil disimpan ke Firebase Cloud'
-          : 'Surat baru berhasil didaftarkan ke Firebase Cloud'
+          ? 'Perubahan surat berhasil disimpan'
+          : 'Surat baru berhasil didaftarkan'
       );
     } catch (err) {
       console.error('Failed to save letter:', err);
-      showToast('Gagal menyimpan surat', 'error');
+      showToast('Gagal menyimpan surat: ' + (err.message || ''), 'error');
     }
   };
 
@@ -285,28 +297,36 @@ export default function App() {
   const handleConfirmDelete = async (id) => {
     try {
       await dbService.deleteLetter(id);
+
+      // Update local React state immediately so UI updates instantly
+      setLetters((prev) => prev.filter((l) => l.id !== id));
+
       setSelectedLetterForDelete(null);
       if (selectedLetterForView?.id === id) {
         setSelectedLetterForView(null);
       }
-      showToast('Dokumen surat berhasil dihapus dari Cloud');
+      showToast('Dokumen surat berhasil dihapus');
     } catch (err) {
       console.error('Failed to delete letter:', err);
-      showToast('Gagal menghapus surat', 'error');
+      showToast('Gagal menghapus surat: ' + (err.message || ''), 'error');
     }
   };
 
   // Add disposition / notes
   const handleSaveDisposition = async (updatedLetter) => {
     try {
-      await dbService.saveLetter(updatedLetter);
-      if (selectedLetterForView?.id === updatedLetter.id) {
-        setSelectedLetterForView(updatedLetter);
+      const saved = await dbService.saveLetter(updatedLetter);
+
+      // Update local React state immediately so UI updates instantly
+      setLetters((prev) => prev.map((l) => (l.id === saved.id ? saved : l)));
+
+      if (selectedLetterForView?.id === saved.id) {
+        setSelectedLetterForView(saved);
       }
-      showToast('Catatan / disposisi berhasil disimpan ke Cloud');
+      showToast('Catatan / disposisi berhasil disimpan');
     } catch (err) {
       console.error('Failed to add disposition:', err);
-      showToast('Gagal menambahkan catatan', 'error');
+      showToast('Gagal menambahkan catatan: ' + (err.message || ''), 'error');
     }
   };
 

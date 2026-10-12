@@ -290,8 +290,9 @@ export const dbService = {
 
   async getLocalLetters() {
     try {
+      const syncCache = this.getInitialLettersSync();
       if (typeof window === 'undefined' || !window.indexedDB) {
-        return INITIAL_DATA;
+        return syncCache;
       }
       const idb = await openDB();
       return new Promise((resolve) => {
@@ -303,19 +304,27 @@ export const dbService = {
           request.onsuccess = () => {
             let results = request.result;
             if (!results || results.length === 0) {
-              this.seedInitialData().then((seeded) => resolve(seeded)).catch(() => resolve(INITIAL_DATA));
+              // Populate IndexedDB with syncCache or INITIAL_DATA
+              if (syncCache && syncCache.length > 0) {
+                this.saveToLocalCache(syncCache);
+                resolve(syncCache);
+              } else {
+                this.seedInitialData().then((seeded) => resolve(seeded)).catch(() => resolve(INITIAL_DATA));
+              }
             } else {
               results.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+              // Ensure sync cache matches IndexedDB
+              this.saveToLocalCache(results);
               resolve(results);
             }
           };
-          request.onerror = () => resolve(INITIAL_DATA);
+          request.onerror = () => resolve(syncCache);
         } catch {
-          resolve(INITIAL_DATA);
+          resolve(syncCache);
         }
       });
     } catch {
-      return INITIAL_DATA;
+      return this.getInitialLettersSync();
     }
   },
 
@@ -369,47 +378,98 @@ export const dbService = {
   },
 
   async saveLetter(letter) {
+    const letterId = letter.id || `${letter.type === 'masuk' ? 'sm' : 'sk'}-${Date.now()}`;
     const letterData = {
       ...letter,
+      id: letterId,
       updatedAt: new Date().toISOString()
     };
 
-    // 1. Save to Firebase Firestore
+    // 1. Immediately update localStorage cache (fast synchronous persistence)
     try {
-      await setDoc(doc(db, 'letters', letter.id), letterData);
-      this.isFirebaseActive = true;
-    } catch (err) {
-      console.warn('Failed to save to Firestore (saved to local cache):', err.message);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const cached = localStorage.getItem('sarpras_letters_sync_cache');
+        let list = cached ? JSON.parse(cached) : [...INITIAL_DATA];
+        if (!Array.isArray(list)) list = [];
+        const index = list.findIndex((item) => item.id === letterData.id);
+        if (index >= 0) {
+          list[index] = letterData;
+        } else {
+          list.unshift(letterData);
+        }
+        // omit giant base64 in sync cache to prevent storage quota issues
+        const slim = list.map((l) => {
+          if (l.file && l.file.base64 && l.file.base64.length > 50000) {
+            const { base64, ...restFile } = l.file;
+            return { ...l, file: restFile };
+          }
+          return l;
+        });
+        localStorage.setItem('sarpras_letters_sync_cache', JSON.stringify(slim));
+      }
+    } catch (storageErr) {
+      console.warn('LocalStorage save error:', storageErr);
     }
 
     // 2. Save to local IndexedDB
-    const idb = await openDB();
-    return new Promise((resolve, reject) => {
+    try {
+      const idb = await openDB();
       const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
       const store = transaction.objectStore(STORE_LETTERS);
-      const request = store.put(letterData);
-      request.onsuccess = () => resolve(letterData);
-      request.onerror = () => reject(request.error);
-    });
+      store.put(letterData);
+    } catch (idbErr) {
+      console.warn('IndexedDB save error:', idbErr);
+    }
+
+    // 3. Try saving to Firebase Firestore in the background
+    try {
+      await setDoc(doc(db, 'letters', letterData.id), letterData);
+      this.isFirebaseActive = true;
+    } catch (err) {
+      console.warn('Firebase Firestore save notice (saved to local cache):', err.message);
+      this.isFirebaseActive = false;
+    }
+
+    return letterData;
   },
 
   async deleteLetter(id) {
-    // 1. Delete from Firebase Firestore
+    // 1. Immediately remove from localStorage cache
     try {
-      await deleteDoc(doc(db, 'letters', id));
-    } catch (err) {
-      console.warn('Failed to delete from Firestore:', err.message);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const cached = localStorage.getItem('sarpras_letters_sync_cache');
+        if (cached) {
+          let list = JSON.parse(cached);
+          if (Array.isArray(list)) {
+            list = list.filter((item) => item.id !== id);
+            localStorage.setItem('sarpras_letters_sync_cache', JSON.stringify(list));
+          }
+        }
+      }
+    } catch (storageErr) {
+      console.warn('LocalStorage delete error:', storageErr);
     }
 
     // 2. Delete from local IndexedDB
-    const idb = await openDB();
-    return new Promise((resolve, reject) => {
+    try {
+      const idb = await openDB();
       const transaction = idb.transaction([STORE_LETTERS, STORE_ATTACHMENTS], 'readwrite');
       transaction.objectStore(STORE_LETTERS).delete(id);
       transaction.objectStore(STORE_ATTACHMENTS).delete(id);
-      transaction.oncomplete = () => resolve(true);
-      transaction.onerror = () => reject(transaction.error);
-    });
+    } catch (idbErr) {
+      console.warn('IndexedDB delete error:', idbErr);
+    }
+
+    // 3. Try deleting from Firebase Firestore in the background
+    try {
+      await deleteDoc(doc(db, 'letters', id));
+      this.isFirebaseActive = true;
+    } catch (err) {
+      console.warn('Firebase Firestore delete notice (deleted locally):', err.message);
+      this.isFirebaseActive = false;
+    }
+
+    return true;
   },
 
   async saveAttachmentFile(letterId, fileBlob, fileName, fileType) {

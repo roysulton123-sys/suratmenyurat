@@ -48,11 +48,18 @@ export default function Navbar({
                     Sarana & Prasarana
                   </span>
 
-                  {/* Firebase Cloud Live Badge */}
-                  <span className="hidden lg:inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
-                    Firebase Online
-                  </span>
+                  {/* Cloud / Local Sync Badge */}
+                  {isCloudConnected ? (
+                    <span className="hidden lg:inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
+                      Firebase Online
+                    </span>
+                  ) : (
+                    <span className="hidden lg:inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
+                      Penyimpanan Lokal Aktif
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-400 font-medium hidden sm:block">
                   Sistem Informasi Persuratan Sarana & Prasarana • Terkoneksi Cloud
