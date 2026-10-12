@@ -5,9 +5,9 @@ import {
   LayoutDashboard,
   BookOpen,
   Plus,
-  Mail,
   ArrowDownLeft,
   ArrowUpRight,
+  Cloud,
   X
 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
@@ -21,6 +21,8 @@ export default function Navbar({
   isDark,
   onToggleTheme,
   isCloudConnected = true,
+  syncState,
+  onOpenSyncModal,
   onOpenInstall
 }) {
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -33,33 +35,43 @@ export default function Navbar({
           <div className="flex items-center justify-between h-16 sm:h-20">
             {/* Brand Logo & Title */}
             <div
-              className="flex items-center space-x-3 cursor-pointer group"
+              className="flex items-center space-x-2.5 sm:space-x-3 cursor-pointer group"
               onClick={() => setActiveTab('dashboard')}
             >
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-ocazte group-hover:scale-105 transition-transform overflow-hidden p-0.5">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-blue-600 via-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-ocazte group-hover:scale-105 transition-transform overflow-hidden p-0.5">
                 <img src="/app-icon.png" alt="Surat Sarpras" className="w-full h-full object-cover rounded-[14px]" />
               </div>
               <div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-extrabold text-slate-900 dark:text-white tracking-tight text-lg sm:text-xl font-sans">
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
+                  <span className="font-extrabold text-slate-900 dark:text-white tracking-tight text-base sm:text-xl font-sans">
                     Surat Sarpras
                   </span>
-                  <span className="text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100/80 dark:border-blue-900/50">
-                    Sarana & Prasarana
+                  <span className="hidden xs:inline-block text-[10px] font-bold tracking-wide uppercase px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-100/80 dark:border-blue-900/50">
+                    Sarpras
                   </span>
 
-                  {/* Cloud / Local Sync Badge */}
-                  {isCloudConnected ? (
-                    <span className="hidden lg:inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse" />
-                      Firebase Online
+                  {/* Cloud / Local Sync Badge (Clickable on both Mobile & Desktop) */}
+                  <button
+                    onClick={onOpenSyncModal}
+                    title="Klik untuk melihat status sinkronisasi cloud"
+                    className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-all active:scale-95 border ${
+                      isCloudConnected
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
+                        : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                        isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                      }`}
+                    />
+                    <span className="hidden sm:inline">
+                      {isCloudConnected ? 'Firebase Online' : 'Penyimpanan Lokal'}
                     </span>
-                  ) : (
-                    <span className="hidden lg:inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mr-1.5" />
-                      Penyimpanan Lokal Aktif
+                    <span className="sm:hidden">
+                      {isCloudConnected ? 'Online' : 'Lokal'}
                     </span>
-                  )}
+                  </button>
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-400 font-medium hidden sm:block">
                   Sistem Informasi Persuratan Sarana & Prasarana • Terkoneksi Cloud
@@ -124,8 +136,18 @@ export default function Navbar({
               </button>
             </nav>
 
-            {/* Right Action Controls: Theme Toggle & Add Button */}
-            <div className="flex items-center space-x-2 sm:space-x-2.5">
+            {/* Right Action Controls: Theme Toggle, Cloud Sync Button & Add Button */}
+            <div className="flex items-center space-x-1.5 sm:space-x-2.5">
+              {/* Cloud Sync Diagnostic Button */}
+              <button
+                onClick={onOpenSyncModal}
+                title="Status Sinkronisasi Multi-Perangkat"
+                className="p-2 sm:px-3 sm:py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center space-x-1.5 text-xs font-semibold"
+              >
+                <Cloud className={`w-4 h-4 ${isCloudConnected ? 'text-emerald-500' : 'text-amber-500'}`} />
+                <span className="hidden xl:inline">Sinkronisasi</span>
+              </button>
+
               {/* Theme Toggle Switch */}
               <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
 
@@ -152,7 +174,7 @@ export default function Navbar({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Tambah Surat Sarpras</h3>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-white">Menu Cepat Surat Sarpras</h3>
               <button
                 onClick={() => setShowAddMenu(false)}
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
@@ -190,6 +212,25 @@ export default function Navbar({
               <div>
                 <p className="text-xs font-bold text-blue-950 dark:text-blue-300">Buat Surat Keluar</p>
                 <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80">Pemberitahuan, surat tugas pemeliharaan</p>
+              </div>
+            </button>
+
+            {/* Cloud Sync Option in Mobile Menu */}
+            <button
+              onClick={() => {
+                setShowAddMenu(false);
+                if (onOpenSyncModal) onOpenSyncModal();
+              }}
+              className="w-full flex items-center space-x-3.5 p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700/60 text-left transition"
+            >
+              <div className="w-10 h-10 rounded-xl bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center shadow-xs">
+                <Cloud className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Status Sinkronisasi Cloud</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {isCloudConnected ? 'Terkoneksi realtime ke Firebase' : 'Perlu aktifkan rules Firebase'}
+                </p>
               </div>
             </button>
           </div>

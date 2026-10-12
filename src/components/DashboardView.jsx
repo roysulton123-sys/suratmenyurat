@@ -14,7 +14,8 @@ import {
   Printer,
   Clock,
   CheckCircle2,
-  Archive
+  Archive,
+  CloudOff
 } from 'lucide-react';
 import { formatDate, STATUS_CONFIG, URGENCY_CONFIG } from '../utils/constants';
 
@@ -22,7 +23,9 @@ export default function DashboardView({
   letters = [],
   onAddNew,
   onView,
-  onNavigateTab
+  onNavigateTab,
+  syncState,
+  onOpenSyncModal
 }) {
   const masukLetters = letters.filter((l) => l.type === 'masuk');
   const keluarLetters = letters.filter((l) => l.type === 'keluar');
@@ -122,6 +125,32 @@ export default function DashboardView({
           </div>
         </div>
       </div>
+
+      {/* Cloud Sync Diagnostic Banner (shown if permission is denied or pending sync) */}
+      {syncState?.status === 'permission_denied' && (
+        <div
+          onClick={onOpenSyncModal}
+          className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 p-3 sm:p-3.5 rounded-2xl flex items-center justify-between cursor-pointer hover:bg-amber-100/60 transition group active:scale-[0.99]"
+        >
+          <div className="flex items-center space-x-2.5">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              <CloudOff className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                Sinkronisasi Multi-Perangkat Belum Aktif
+              </p>
+              <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80">
+                Data tersimpan di HP ini. Klik di sini untuk panduan 1 menit agar data HP & Website otomatis tersinkron.
+              </p>
+            </div>
+          </div>
+          <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 flex items-center space-x-1 shrink-0 ml-2">
+            <span className="hidden sm:inline">Aktifkan</span>
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition" />
+          </span>
+        </div>
+      )}
 
       {/* 2. Menu Pilihan Lengkap Dashboard (2x2 Grid on Mobile, 4-Cols on Desktop) */}
       <div>
