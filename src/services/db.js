@@ -16,12 +16,13 @@ import {
 import { db, storage } from './firebase';
 
 const DB_NAME = 'SuratSarprasDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_LETTERS = 'letters';
 const STORE_ATTACHMENTS = 'attachments';
 
 const PENDING_UPLOADS_KEY = 'sarpras_pending_uploads';
 const PENDING_DELETES_KEY = 'sarpras_pending_deletes';
+const DELETED_IDS_KEY = 'sarpras_deleted_ids';
 
 // Initial realistic Sarpras mock data
 const INITIAL_DATA = [
@@ -202,6 +203,47 @@ export const dbService = {
   activeUnsubscribe: null,
   retryTimer: null,
 
+  // Persistent blacklist for deleted letter IDs
+  getDeletedIds() {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const val = localStorage.getItem(DELETED_IDS_KEY);
+        return new Set(val ? JSON.parse(val) : []);
+      }
+    } catch {
+      // ignore
+    }
+    return new Set();
+  },
+
+  addDeletedId(id) {
+    if (!id) return;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const set = this.getDeletedIds();
+        set.add(id);
+        localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(set)));
+      }
+    } catch {
+      // ignore
+    }
+  },
+
+  removeDeletedId(id) {
+    if (!id) return;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const set = this.getDeletedIds();
+        if (set.has(id)) {
+          set.delete(id);
+          localStorage.setItem(DELETED_IDS_KEY, JSON.stringify(Array.from(set)));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  },
+
   // Subscribe to sync status changes
   onSyncStatusChange(callback) {
     this.syncListeners.add(callback);
@@ -248,6 +290,7 @@ export const dbService = {
   },
 
   addPendingUpload(id) {
+    if (!id) return;
     try {
       const list = this.getPendingUploads();
       if (!list.includes(id)) {
@@ -260,6 +303,7 @@ export const dbService = {
   },
 
   removePendingUpload(id) {
+    if (!id) return;
     try {
       const list = this.getPendingUploads().filter((item) => item !== id);
       localStorage.setItem(PENDING_UPLOADS_KEY, JSON.stringify(list));
@@ -289,6 +333,7 @@ export const dbService = {
   },
 
   addPendingDelete(id) {
+    if (!id) return;
     try {
       const list = this.getPendingDeletes();
       if (!list.includes(id)) {
@@ -301,6 +346,7 @@ export const dbService = {
   },
 
   removePendingDelete(id) {
+    if (!id) return;
     try {
       const list = this.getPendingDeletes().filter((item) => item !== id);
       localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(list));
@@ -320,19 +366,21 @@ export const dbService = {
   // Synchronous cache reader for 0ms instant startup without stuck screen
   getInitialLettersSync() {
     try {
+      const deletedIds = this.getDeletedIds();
       if (typeof window !== 'undefined' && window.localStorage) {
         const cached = localStorage.getItem('sarpras_letters_sync_cache');
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
+          if (Array.isArray(parsed)) {
+            return parsed.filter((l) => !deletedIds.has(l.id));
           }
         }
       }
+      return INITIAL_DATA.filter((l) => !deletedIds.has(l.id));
     } catch (e) {
       console.warn('Sync cache read error:', e);
     }
-    return INITIAL_DATA;
+    return INITIAL_DATA.filter((l) => !this.getDeletedIds().has(l.id));
   },
 
   // Test live connection to Firestore
@@ -367,8 +415,10 @@ export const dbService = {
     }
   },
 
-  // Real-time listener for Firestore collection with Instant Local Cache Fallback & Auto-Reconnect
+  // Real-time listener for Firestore collection with Instant Local Cache Fallback & Background Auto-Sync
   subscribeLetters(onUpdate, onError) {
+    const deletedIds = this.getDeletedIds();
+
     // 1. Immediately provide synchronous cache so UI is ready in 0ms
     const initialSync = this.getInitialLettersSync();
     if (initialSync && initialSync.length > 0) {
@@ -379,11 +429,11 @@ export const dbService = {
     this.getLocalLetters()
       .then((local) => {
         if (local && local.length > 0) {
-          onUpdate(local, false);
+          onUpdate(local.filter((l) => !deletedIds.has(l.id)), false);
         }
       })
       .catch(() => {
-        onUpdate(INITIAL_DATA, false);
+        onUpdate(INITIAL_DATA.filter((l) => !deletedIds.has(l.id)), false);
       });
 
     let currentUnsubscribe = null;
@@ -412,18 +462,27 @@ export const dbService = {
             this.lastError = null;
             this.notifySyncState();
 
+            const currentDeletedIds = this.getDeletedIds();
+
             if (!snapshot.empty) {
               const items = [];
-              snapshot.forEach((d) => items.push(d.data()));
+              snapshot.forEach((d) => {
+                const data = d.data();
+                if (!currentDeletedIds.has(data.id)) {
+                  items.push(data);
+                } else {
+                  // Silently remove deleted item from Firestore in background
+                  deleteDoc(doc(db, 'letters', data.id)).catch(() => {});
+                }
+              });
+
               items.sort(
                 (a, b) =>
                   new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)
               );
 
               // Background reconciliation: push any pending local items to cloud
-              this.reconcileLocalPendingToCloud(items).catch((recErr) =>
-                console.warn('Reconcile pending notice:', recErr)
-              );
+              this.reconcileLocalPendingToCloud(items).catch(() => {});
 
               await this.saveToLocalCache(items);
               onUpdate(items, true);
@@ -433,18 +492,20 @@ export const dbService = {
                 const localLetters = await this.getLocalLetters();
                 const toUpload =
                   localLetters && localLetters.length > 0
-                    ? localLetters
-                    : INITIAL_DATA;
+                    ? localLetters.filter((l) => !currentDeletedIds.has(l.id))
+                    : INITIAL_DATA.filter((l) => !currentDeletedIds.has(l.id));
 
-                await Promise.all(
-                  toUpload.map((item) => setDoc(doc(db, 'letters', item.id), item))
-                );
+                if (toUpload.length > 0) {
+                  await Promise.all(
+                    toUpload.map((item) => setDoc(doc(db, 'letters', item.id), item))
+                  );
+                }
                 await this.saveToLocalCache(toUpload);
                 onUpdate(toUpload, true);
               } catch (seedErr) {
                 console.warn('Firestore seeding notice:', seedErr);
                 const local = await this.getLocalLetters();
-                onUpdate(local, false);
+                onUpdate(local.filter((l) => !currentDeletedIds.has(l.id)), false);
               }
             }
           },
@@ -461,7 +522,10 @@ export const dbService = {
             this.notifySyncState();
 
             if (onError) onError(error);
-            this.getLocalLetters().then((local) => onUpdate(local, false));
+            this.getLocalLetters().then((local) => {
+              const currentDeletedIds = this.getDeletedIds();
+              onUpdate(local.filter((l) => !currentDeletedIds.has(l.id)), false);
+            });
 
             // Schedule auto-reconnect retry every 15 seconds
             clearTimeout(this.retryTimer);
@@ -480,7 +544,10 @@ export const dbService = {
         this.notifySyncState();
 
         if (onError) onError(err);
-        this.getLocalLetters().then((local) => onUpdate(local, false));
+        this.getLocalLetters().then((local) => {
+          const currentDeletedIds = this.getDeletedIds();
+          onUpdate(local.filter((l) => !currentDeletedIds.has(l.id)), false);
+        });
 
         clearTimeout(this.retryTimer);
         this.retryTimer = setTimeout(() => {
@@ -503,7 +570,8 @@ export const dbService = {
         if (pendingUploads.length > 0 || pendingDeletes.length > 0 || !this.isFirebaseActive) {
           const res = await this.syncLocalToCloud();
           if (res.success && res.letters && isSubscribed) {
-            onUpdate(res.letters, true);
+            const currentDeleted = this.getDeletedIds();
+            onUpdate(res.letters.filter((l) => !currentDeleted.has(l.id)), true);
           }
         }
       } catch {
@@ -516,7 +584,8 @@ export const dbService = {
       connectListener();
       this.syncLocalToCloud().then((res) => {
         if (res.success && res.letters && isSubscribed) {
-          onUpdate(res.letters, true);
+          const currentDeleted = this.getDeletedIds();
+          onUpdate(res.letters.filter((l) => !currentDeleted.has(l.id)), true);
         }
       }).catch(() => {});
     };
@@ -525,7 +594,8 @@ export const dbService = {
       connectListener();
       this.syncLocalToCloud().then((res) => {
         if (res.success && res.letters && isSubscribed) {
-          onUpdate(res.letters, true);
+          const currentDeleted = this.getDeletedIds();
+          onUpdate(res.letters.filter((l) => !currentDeleted.has(l.id)), true);
         }
       }).catch(() => {});
     };
@@ -556,16 +626,17 @@ export const dbService = {
   // Upload any local items that haven't been synced to Firestore yet
   async reconcileLocalPendingToCloud(remoteLetters) {
     try {
+      const deletedIds = this.getDeletedIds();
       const pendingUploads = this.getPendingUploads();
       const pendingDeletes = this.getPendingDeletes();
 
       // Process pending deletes
-      for (const delId of pendingDeletes) {
+      for (const delId of [...pendingDeletes, ...deletedIds]) {
         try {
           await deleteDoc(doc(db, 'letters', delId));
           this.removePendingDelete(delId);
-        } catch (e) {
-          console.warn('Pending delete sync notice:', e);
+        } catch {
+          // ignore
         }
       }
 
@@ -573,7 +644,7 @@ export const dbService = {
       const localLetters = await this.getLocalLetters();
 
       for (const local of localLetters) {
-        // If not in remote or explicitly in pending upload queue, upload to Firestore
+        if (deletedIds.has(local.id)) continue;
         if (!remoteIds.has(local.id) || pendingUploads.includes(local.id)) {
           try {
             await setDoc(doc(db, 'letters', local.id), local);
@@ -588,7 +659,7 @@ export const dbService = {
     }
   },
 
-  // Manual Force-Sync & Reconciliation
+  // Background Full Auto-Sync & Reconciliation
   async syncLocalToCloud() {
     this.syncStatus = 'connecting';
     this.notifySyncState();
@@ -604,14 +675,16 @@ export const dbService = {
     }
 
     try {
-      // 2. Process pending deletes
+      const deletedIds = this.getDeletedIds();
+
+      // 2. Process all pending deletes
       const pendingDeletes = this.getPendingDeletes();
-      for (const delId of pendingDeletes) {
+      for (const delId of [...pendingDeletes, ...deletedIds]) {
         try {
           await deleteDoc(doc(db, 'letters', delId));
           this.removePendingDelete(delId);
-        } catch (e) {
-          console.warn('Sync pending delete error:', e);
+        } catch {
+          // ignore
         }
       }
 
@@ -619,18 +692,28 @@ export const dbService = {
       const lettersCol = collection(db, 'letters');
       const remoteSnapshot = await getDocs(lettersCol);
       const remoteMap = new Map();
-      remoteSnapshot.forEach((d) => remoteMap.set(d.id, d.data()));
+      remoteSnapshot.forEach((d) => {
+        if (!deletedIds.has(d.id)) {
+          remoteMap.set(d.id, d.data());
+        } else {
+          deleteDoc(doc(db, 'letters', d.id)).catch(() => {});
+        }
+      });
 
       // 4. Fetch local letters
       const localLetters = await this.getLocalLetters();
       const localMap = new Map();
-      localLetters.forEach((l) => localMap.set(l.id, l));
+      localLetters.forEach((l) => {
+        if (!deletedIds.has(l.id)) {
+          localMap.set(l.id, l);
+        }
+      });
 
       const mergedMap = new Map();
 
-      // If remote is empty, seed everything from local
+      // If remote is empty, seed active local letters
       if (remoteMap.size === 0) {
-        const toUpload = localLetters.length > 0 ? localLetters : INITIAL_DATA;
+        const toUpload = localLetters.filter((l) => !deletedIds.has(l.id));
         for (const item of toUpload) {
           await setDoc(doc(db, 'letters', item.id), item);
           mergedMap.set(item.id, item);
@@ -638,13 +721,12 @@ export const dbService = {
       } else {
         // Upload any local letter not present in remote or newer
         for (const [id, localItem] of localMap.entries()) {
+          if (deletedIds.has(id)) continue;
           const remoteItem = remoteMap.get(id);
           if (!remoteItem) {
-            // Local-only -> upload to Firestore
             await setDoc(doc(db, 'letters', id), localItem);
             mergedMap.set(id, localItem);
           } else {
-            // Compare timestamps
             const localDate = new Date(localItem.updatedAt || localItem.createdAt || 0);
             const remoteDate = new Date(remoteItem.updatedAt || remoteItem.createdAt || 0);
             if (localDate > remoteDate) {
@@ -658,20 +740,21 @@ export const dbService = {
 
         // Include any remote letters not present in local
         for (const [id, remoteItem] of remoteMap.entries()) {
+          if (deletedIds.has(id)) continue;
           if (!mergedMap.has(id)) {
             mergedMap.set(id, remoteItem);
           }
         }
       }
 
-      // 5. Clear pending queues
+      // 5. Clear pending upload queues
       this.clearPendingUploads();
       this.clearPendingDeletes();
 
       // 6. Save merged list locally
-      const mergedList = Array.from(mergedMap.values()).sort(
-        (a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt)
-      );
+      const mergedList = Array.from(mergedMap.values())
+        .filter((l) => !deletedIds.has(l.id))
+        .sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
 
       await this.saveToLocalCache(mergedList);
 
@@ -705,11 +788,17 @@ export const dbService = {
 
   async getAllLetters() {
     try {
+      const deletedIds = this.getDeletedIds();
       const lettersCol = collection(db, 'letters');
       const snapshot = await getDocs(lettersCol);
       if (!snapshot.empty) {
         const results = [];
-        snapshot.forEach((docSnap) => results.push(docSnap.data()));
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          if (!deletedIds.has(d.id)) {
+            results.push(d);
+          }
+        });
         results.sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
         this.isFirebaseActive = true;
         this.syncStatus = 'connected';
@@ -736,6 +825,7 @@ export const dbService = {
 
   async getLocalLetters() {
     try {
+      const deletedIds = this.getDeletedIds();
       const syncCache = this.getInitialLettersSync();
       if (typeof window === 'undefined' || !window.indexedDB) {
         return syncCache;
@@ -748,8 +838,10 @@ export const dbService = {
           const request = store.getAll();
 
           request.onsuccess = () => {
-            let results = request.result;
-            if (!results || results.length === 0) {
+            let results = request.result || [];
+            results = results.filter((l) => !deletedIds.has(l.id));
+
+            if (results.length === 0 && deletedIds.size === 0) {
               if (syncCache && syncCache.length > 0) {
                 this.saveToLocalCache(syncCache);
                 resolve(syncCache);
@@ -779,14 +871,15 @@ export const dbService = {
 
   async saveToLocalCache(lettersList) {
     try {
-      if (
-        typeof window !== 'undefined' &&
-        window.localStorage &&
-        Array.isArray(lettersList)
-      ) {
+      const deletedIds = this.getDeletedIds();
+      const activeList = Array.isArray(lettersList)
+        ? lettersList.filter((l) => !deletedIds.has(l.id))
+        : [];
+
+      if (typeof window !== 'undefined' && window.localStorage) {
         try {
           // Keep a lightweight synchronous copy for 0ms cold starts
-          const slim = lettersList.map((l) => {
+          const slim = activeList.map((l) => {
             if (l.file && l.file.base64 && l.file.base64.length > 50000) {
               const { base64, ...restFile } = l.file;
               return { ...l, file: restFile };
@@ -805,7 +898,7 @@ export const dbService = {
       const idb = await openDB();
       const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
       const store = transaction.objectStore(STORE_LETTERS);
-      for (const item of lettersList) {
+      for (const item of activeList) {
         store.put(item);
       }
     } catch (e) {
@@ -814,11 +907,14 @@ export const dbService = {
   },
 
   async seedInitialData() {
+    const deletedIds = this.getDeletedIds();
+    const activeInitial = INITIAL_DATA.filter((l) => !deletedIds.has(l.id));
+
     try {
       const idb = await openDB();
       const transaction = idb.transaction(STORE_LETTERS, 'readwrite');
       const store = transaction.objectStore(STORE_LETTERS);
-      for (const item of INITIAL_DATA) {
+      for (const item of activeInitial) {
         store.put(item);
       }
     } catch (e) {
@@ -826,7 +922,7 @@ export const dbService = {
     }
 
     // Seeding to Firestore without blocking UI
-    Promise.all(INITIAL_DATA.map((item) => setDoc(doc(db, 'letters', item.id), item)))
+    Promise.all(activeInitial.map((item) => setDoc(doc(db, 'letters', item.id), item)))
       .then(() => {
         this.isFirebaseActive = true;
         this.syncStatus = 'connected';
@@ -841,7 +937,7 @@ export const dbService = {
         this.notifySyncState();
       });
 
-    return INITIAL_DATA;
+    return activeInitial;
   },
 
   async saveLetter(letter) {
@@ -853,11 +949,14 @@ export const dbService = {
       updatedAt: new Date().toISOString()
     };
 
+    // Ensure it is not marked as deleted
+    this.removeDeletedId(letterData.id);
+
     // 1. Immediately update localStorage cache (instant UI persistence)
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const cached = localStorage.getItem('sarpras_letters_sync_cache');
-        let list = cached ? JSON.parse(cached) : [...INITIAL_DATA];
+        let list = cached ? JSON.parse(cached) : [];
         if (!Array.isArray(list)) list = [];
         const index = list.findIndex((item) => item.id === letterData.id);
         if (index >= 0) {
@@ -917,14 +1016,22 @@ export const dbService = {
   },
 
   async deleteLetter(id) {
-    // 1. Immediately remove from localStorage cache
+    const letterId = typeof id === 'object' && id !== null ? (id.id || id) : id;
+    if (!letterId) return false;
+
+    // 1. Permanently mark as deleted
+    this.addDeletedId(letterId);
+    this.removePendingUpload(letterId);
+    this.addPendingDelete(letterId);
+
+    // 2. Immediately remove from localStorage cache
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const cached = localStorage.getItem('sarpras_letters_sync_cache');
         if (cached) {
           let list = JSON.parse(cached);
           if (Array.isArray(list)) {
-            list = list.filter((item) => item.id !== id);
+            list = list.filter((item) => item.id !== letterId);
             localStorage.setItem('sarpras_letters_sync_cache', JSON.stringify(list));
           }
         }
@@ -933,35 +1040,47 @@ export const dbService = {
       console.warn('LocalStorage delete error:', storageErr);
     }
 
-    // 2. Delete from local IndexedDB
+    // 3. Delete from local IndexedDB safely
     try {
       const idb = await openDB();
-      const transaction = idb.transaction(
-        [STORE_LETTERS, STORE_ATTACHMENTS],
-        'readwrite'
-      );
-      transaction.objectStore(STORE_LETTERS).delete(id);
-      transaction.objectStore(STORE_ATTACHMENTS).delete(id);
+      await new Promise((resolve) => {
+        try {
+          if (!idb.objectStoreNames.contains(STORE_LETTERS)) {
+            return resolve();
+          }
+          const stores = [STORE_LETTERS];
+          if (idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
+            stores.push(STORE_ATTACHMENTS);
+          }
+          const transaction = idb.transaction(stores, 'readwrite');
+          transaction.objectStore(STORE_LETTERS).delete(letterId);
+          if (stores.includes(STORE_ATTACHMENTS)) {
+            transaction.objectStore(STORE_ATTACHMENTS).delete(letterId);
+          }
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = () => resolve();
+        } catch {
+          resolve();
+        }
+      });
     } catch (idbErr) {
       console.warn('IndexedDB delete error:', idbErr);
     }
 
-    // 3. Update pending queues
-    this.removePendingUpload(id);
-    this.addPendingDelete(id);
-    this.notifySyncState();
+    // 4. Try deleting from Firebase Cloud Storage
+    this.deleteAttachment(letterId).catch(() => {});
 
-    // 4. Try deleting from Firebase Firestore
+    // 5. Try deleting from Firebase Firestore
     try {
-      await deleteDoc(doc(db, 'letters', id));
-      this.removePendingDelete(id);
+      await deleteDoc(doc(db, 'letters', letterId));
+      this.removePendingDelete(letterId);
       this.isFirebaseActive = true;
       this.syncStatus = 'connected';
       this.lastSyncTime = new Date().toISOString();
       this.lastError = null;
       this.notifySyncState();
     } catch (err) {
-      console.warn('Firebase Firestore delete notice (deleted locally):', err.message);
+      console.warn('Firestore delete notice (marked as deleted locally):', err.message);
       this.isFirebaseActive = false;
       if (err.code === 'permission-denied') {
         this.syncStatus = 'permission_denied';
@@ -1026,13 +1145,24 @@ export const dbService = {
       // ignore
     }
 
-    const idb = await openDB();
-    return new Promise((resolve, reject) => {
-      const transaction = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
-      const store = transaction.objectStore(STORE_ATTACHMENTS);
-      const request = store.delete(letterId);
-      request.onsuccess = () => resolve(true);
-      request.onerror = () => reject(request.error);
-    });
+    try {
+      const idb = await openDB();
+      return new Promise((resolve) => {
+        try {
+          if (!idb.objectStoreNames.contains(STORE_ATTACHMENTS)) {
+            return resolve(true);
+          }
+          const transaction = idb.transaction(STORE_ATTACHMENTS, 'readwrite');
+          const store = transaction.objectStore(STORE_ATTACHMENTS);
+          const request = store.delete(letterId);
+          request.onsuccess = () => resolve(true);
+          request.onerror = () => resolve(true);
+        } catch {
+          resolve(true);
+        }
+      });
+    } catch {
+      return true;
+    }
   }
 };

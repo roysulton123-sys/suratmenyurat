@@ -56,6 +56,7 @@ export default function App() {
   const [selectedLetterForDisposition, setSelectedLetterForDisposition] = useState(null);
   const [selectedLetterForFile, setSelectedLetterForFile] = useState(null);
   const [selectedLetterForDelete, setSelectedLetterForDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [selectedLetterForPrint, setSelectedLetterForPrint] = useState(null);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
@@ -93,6 +94,7 @@ export default function App() {
     selectedLetterForFile,
     selectedLetterForPrint,
     selectedLetterForDelete,
+    isDeleting,
     isInstallModalOpen,
     isExitConfirmOpen
   });
@@ -107,6 +109,7 @@ export default function App() {
       selectedLetterForFile,
       selectedLetterForPrint,
       selectedLetterForDelete,
+      isDeleting,
       isInstallModalOpen,
       isExitConfirmOpen
     };
@@ -119,6 +122,7 @@ export default function App() {
     selectedLetterForFile,
     selectedLetterForPrint,
     selectedLetterForDelete,
+    isDeleting,
     isInstallModalOpen,
     isExitConfirmOpen
   ]);
@@ -135,7 +139,9 @@ export default function App() {
 
     // 2. If any sub-modal is open, close that sub-modal first (staying on current page)
     if (state.selectedLetterForDelete) {
-      setSelectedLetterForDelete(null);
+      if (!state.isDeleting) {
+        setSelectedLetterForDelete(null);
+      }
       return;
     }
     if (state.selectedLetterForPrint) {
@@ -303,7 +309,10 @@ export default function App() {
   };
 
   // Delete letter
-  const handleConfirmDelete = async (id) => {
+  const handleConfirmDelete = async (target) => {
+    const id = typeof target === 'string' ? target : (target?.id || selectedLetterForDelete?.id);
+    if (!id) return;
+    setIsDeleting(true);
     try {
       await dbService.deleteLetter(id);
 
@@ -318,6 +327,8 @@ export default function App() {
     } catch (err) {
       console.error('Failed to delete letter:', err);
       showToast('Gagal menghapus surat: ' + (err.message || ''), 'error');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -513,6 +524,7 @@ export default function App() {
           openEdit(letter);
         }}
         onDelete={(letter) => {
+          setSelectedLetterForView(null);
           openDeleteConfirm(letter);
         }}
         onAddDisposition={(letter) => {
@@ -547,8 +559,13 @@ export default function App() {
       <DeleteConfirmModal
         letter={selectedLetterForDelete}
         isOpen={Boolean(selectedLetterForDelete)}
-        onClose={() => setSelectedLetterForDelete(null)}
+        onClose={() => {
+          if (!isDeleting) {
+            setSelectedLetterForDelete(null);
+          }
+        }}
         onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
       />
 
       <InstallAppModal

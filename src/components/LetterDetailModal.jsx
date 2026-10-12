@@ -82,7 +82,11 @@ export default function LetterDetailModal({
               <Edit2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => onDelete(letter)}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(letter);
+              }}
               className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl transition"
               title="Hapus Surat"
             >

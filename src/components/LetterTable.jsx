@@ -288,21 +288,33 @@ export default function LetterTable({
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
-                        onClick={() => onAddDisposition(item)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddDisposition(item);
+                        }}
                         className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition"
                         title="Beri Keterangan / Disposisi"
                       >
                         <MessageSquarePlus className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => onEdit(item)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(item);
+                        }}
                         className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-xl transition"
                         title="Edit Surat"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => onDelete(item)}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(item);
+                        }}
                         className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl transition"
                         title="Hapus Surat"
                       >
@@ -415,28 +427,44 @@ export default function LetterTable({
                         >
                           <div className="flex items-center justify-end space-x-1">
                             <button
-                              onClick={() => onView(item)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onView(item);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
                               title="Lihat Detail"
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => onAddDisposition(item)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onAddDisposition(item);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-slate-800 rounded-xl transition"
                               title="Beri Keterangan"
                             >
                               <MessageSquarePlus className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => onEdit(item)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit(item);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-slate-800 rounded-xl transition"
                               title="Edit Surat"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => onDelete(item)}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(item);
+                              }}
                               className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-xl transition"
                               title="Hapus Surat"
                             >
