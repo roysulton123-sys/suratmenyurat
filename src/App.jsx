@@ -11,7 +11,6 @@ import DeleteConfirmModal from './components/DeleteConfirmModal';
 import AgendaReportView from './components/AgendaReportView';
 import InstallAppModal from './components/InstallAppModal';
 import ExitConfirmModal from './components/ExitConfirmModal';
-import CloudSyncModal from './components/CloudSyncModal';
 import Toast from './components/Toast';
 import { dbService } from './services/db';
 import { Plus, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
@@ -24,7 +23,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [syncState, setSyncState] = useState(() => dbService.getSyncState());
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
 
   // Dark mode state with localStorage persistence
   const [isDark, setIsDark] = useState(() => {
@@ -96,7 +94,6 @@ export default function App() {
     selectedLetterForPrint,
     selectedLetterForDelete,
     isInstallModalOpen,
-    isSyncModalOpen,
     isExitConfirmOpen
   });
 
@@ -111,7 +108,6 @@ export default function App() {
       selectedLetterForPrint,
       selectedLetterForDelete,
       isInstallModalOpen,
-      isSyncModalOpen,
       isExitConfirmOpen
     };
   }, [
@@ -124,7 +120,6 @@ export default function App() {
     selectedLetterForPrint,
     selectedLetterForDelete,
     isInstallModalOpen,
-    isSyncModalOpen,
     isExitConfirmOpen
   ]);
 
@@ -139,10 +134,6 @@ export default function App() {
     }
 
     // 2. If any sub-modal is open, close that sub-modal first (staying on current page)
-    if (state.isSyncModalOpen) {
-      setIsSyncModalOpen(false);
-      return;
-    }
     if (state.selectedLetterForDelete) {
       setSelectedLetterForDelete(null);
       return;
@@ -395,8 +386,6 @@ export default function App() {
         isDark={isDark}
         onToggleTheme={toggleTheme}
         isCloudConnected={isCloudConnected}
-        syncState={syncState}
-        onOpenSyncModal={() => setIsSyncModalOpen(true)}
         onOpenInstall={() => setIsInstallModalOpen(true)}
       />
 
@@ -416,8 +405,6 @@ export default function App() {
                 onAddNew={openAddNew}
                 onView={openView}
                 onNavigateTab={navigateToTab}
-                syncState={syncState}
-                onOpenSyncModal={() => setIsSyncModalOpen(true)}
               />
             )}
 
@@ -574,18 +561,6 @@ export default function App() {
         isOpen={isExitConfirmOpen}
         onClose={() => setIsExitConfirmOpen(false)}
         onConfirm={handleConfirmExit}
-      />
-
-      {/* Cloud Sync Diagnostic & Multi-Device Modal */}
-      <CloudSyncModal
-        isOpen={isSyncModalOpen}
-        onClose={() => setIsSyncModalOpen(false)}
-        syncState={syncState}
-        lettersCount={letters.length}
-        onSyncCompleted={(syncedLetters) => {
-          setLetters(syncedLetters);
-          showToast('Sinkronisasi cloud berhasil diselesaikan');
-        }}
       />
 
       {/* Toast Feedback */}

@@ -7,7 +7,6 @@ import {
   Plus,
   ArrowDownLeft,
   ArrowUpRight,
-  Cloud,
   X
 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
@@ -21,8 +20,6 @@ export default function Navbar({
   isDark,
   onToggleTheme,
   isCloudConnected = true,
-  syncState,
-  onOpenSyncModal,
   onOpenInstall
 }) {
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -50,15 +47,18 @@ export default function Navbar({
                     Sarpras
                   </span>
 
-                  {/* Cloud / Local Sync Badge (Clickable on both Mobile & Desktop) */}
-                  <button
-                    onClick={onOpenSyncModal}
-                    title="Klik untuk melihat status sinkronisasi cloud"
-                    className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-all active:scale-95 border ${
+                  {/* Automatic Sync Status Badge (Quiet / Non-intrusive) */}
+                  <div
+                    className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full border select-none ${
                       isCloudConnected
-                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/50'
-                        : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800'
                     }`}
+                    title={
+                      isCloudConnected
+                        ? 'Sinkronisasi Otomatis Cloud Aktif'
+                        : 'Penyimpanan Lokal Aktif (Auto-Sync Berjalan)'
+                    }
                   >
                     <span
                       className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
@@ -66,15 +66,15 @@ export default function Navbar({
                       }`}
                     />
                     <span className="hidden sm:inline">
-                      {isCloudConnected ? 'Firebase Online' : 'Penyimpanan Lokal'}
+                      {isCloudConnected ? 'Otomatis Sinkron' : 'Penyimpanan Lokal'}
                     </span>
                     <span className="sm:hidden">
                       {isCloudConnected ? 'Online' : 'Lokal'}
                     </span>
-                  </button>
+                  </div>
                 </div>
                 <p className="text-[11px] text-slate-400 dark:text-slate-400 font-medium hidden sm:block">
-                  Sistem Informasi Persuratan Sarana & Prasarana • Terkoneksi Cloud
+                  Sistem Informasi Persuratan Sarana & Prasarana • Terkoneksi Cloud Otomatis
                 </p>
               </div>
             </div>
@@ -136,18 +136,8 @@ export default function Navbar({
               </button>
             </nav>
 
-            {/* Right Action Controls: Theme Toggle, Cloud Sync Button & Add Button */}
+            {/* Right Action Controls: Theme Toggle & Add Button */}
             <div className="flex items-center space-x-1.5 sm:space-x-2.5">
-              {/* Cloud Sync Diagnostic Button */}
-              <button
-                onClick={onOpenSyncModal}
-                title="Status Sinkronisasi Multi-Perangkat"
-                className="p-2 sm:px-3 sm:py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center space-x-1.5 text-xs font-semibold"
-              >
-                <Cloud className={`w-4 h-4 ${isCloudConnected ? 'text-emerald-500' : 'text-amber-500'}`} />
-                <span className="hidden xl:inline">Sinkronisasi</span>
-              </button>
-
               {/* Theme Toggle Switch */}
               <ThemeToggle isDark={isDark} onToggle={onToggleTheme} />
 
@@ -212,25 +202,6 @@ export default function Navbar({
               <div>
                 <p className="text-xs font-bold text-blue-950 dark:text-blue-300">Buat Surat Keluar</p>
                 <p className="text-[11px] text-blue-700/80 dark:text-blue-400/80">Pemberitahuan, surat tugas pemeliharaan</p>
-              </div>
-            </button>
-
-            {/* Cloud Sync Option in Mobile Menu */}
-            <button
-              onClick={() => {
-                setShowAddMenu(false);
-                if (onOpenSyncModal) onOpenSyncModal();
-              }}
-              className="w-full flex items-center space-x-3.5 p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700/60 text-left transition"
-            >
-              <div className="w-10 h-10 rounded-xl bg-slate-700 dark:bg-slate-600 text-white flex items-center justify-center shadow-xs">
-                <Cloud className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Status Sinkronisasi Cloud</p>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  {isCloudConnected ? 'Terkoneksi realtime ke Firebase' : 'Perlu aktifkan rules Firebase'}
-                </p>
               </div>
             </button>
           </div>

@@ -493,15 +493,41 @@ export const dbService = {
 
     connectListener();
 
-    // Reconnect immediately when window gains focus or online event fires
-    const handleWindowFocus = () => {
-      if (!this.isFirebaseActive) {
-        connectListener();
+    // Automatic Background Auto-Sync Loop (runs completely in background without any buttons)
+    const autoSyncTimer = setInterval(async () => {
+      if (!isSubscribed) return;
+      try {
+        const pendingUploads = this.getPendingUploads();
+        const pendingDeletes = this.getPendingDeletes();
+        // If there are pending changes or if connection status needs refresh, sync automatically
+        if (pendingUploads.length > 0 || pendingDeletes.length > 0 || !this.isFirebaseActive) {
+          const res = await this.syncLocalToCloud();
+          if (res.success && res.letters && isSubscribed) {
+            onUpdate(res.letters, true);
+          }
+        }
+      } catch {
+        // silent background failure
       }
+    }, 10000);
+
+    // Reconnect and auto-sync immediately when window gains focus or online event fires
+    const handleWindowFocus = () => {
+      connectListener();
+      this.syncLocalToCloud().then((res) => {
+        if (res.success && res.letters && isSubscribed) {
+          onUpdate(res.letters, true);
+        }
+      }).catch(() => {});
     };
 
     const handleOnline = () => {
       connectListener();
+      this.syncLocalToCloud().then((res) => {
+        if (res.success && res.letters && isSubscribed) {
+          onUpdate(res.letters, true);
+        }
+      }).catch(() => {});
     };
 
     if (typeof window !== 'undefined') {
@@ -512,6 +538,7 @@ export const dbService = {
     return () => {
       isSubscribed = false;
       clearTimeout(this.retryTimer);
+      clearInterval(autoSyncTimer);
       if (currentUnsubscribe) {
         try {
           currentUnsubscribe();
