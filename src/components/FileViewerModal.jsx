@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Download, FileText, Image as ImageIcon, ExternalLink, Eye, Check, Loader2 } from 'lucide-react';
+import { X, Download, FileText, Image as ImageIcon, ExternalLink, Check, Loader2 } from 'lucide-react';
 import { dbService } from '../services/db';
 import { formatFileSize } from '../utils/constants';
 import { downloadAttachment } from '../utils/fileHelper';

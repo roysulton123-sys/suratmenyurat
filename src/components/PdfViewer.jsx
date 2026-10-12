@@ -23,7 +23,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export default function PdfViewer({ fileUrl, dataUrl, fileName, onDownload }) {
+export default function PdfViewer({ fileUrl, dataUrl, fileName: _fileName, onDownload }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [pdfDoc, setPdfDoc] = useState(null);
